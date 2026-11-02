@@ -1,0 +1,980 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FAF8F4">
+<title>Show Me Once</title>
+<style>
+:root { --bg:#FAF8F4; --card:#FFFFFF; --ink:#22302D; --sub:#6B7875; --line:#EFEBE4;
+  --p:#3F9E8F; --p2:#7CC0B5; --p3:#BFE3DC; --p4:#E2F2EE; --p5:#F1F8F6;
+  --w:#F0614F; --wT:#B83A2A; --w4:#FFE4DF; --w5:#FFF3F0; --ok:#2F7F73; --ok5:#E2F2EE;
+  --shadow:0 4px 20px rgba(63,158,143,.08); }
+* { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,"SF Pro Display","PingFang SC",system-ui,sans-serif; }
+button { font:inherit; color:inherit; border:0; background:none; cursor:pointer; }
+input, textarea { font:inherit; color:inherit; }
+.view { display:none; min-height:100%; padding:calc(env(safe-area-inset-top) + 20px) 16px calc(env(safe-area-inset-bottom) + 120px); max-width:560px; margin:0 auto; }
+.view.on { display:block; }
+h1 { font-size:30px; font-weight:800; letter-spacing:-.5px; margin:4px 0 0; }
+h2 { font-size:19px; font-weight:800; margin:0; }
+.sub { color:var(--sub); }
+.top { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:44px; }
+.card { background:var(--card); border-radius:24px; padding:18px; box-shadow:var(--shadow); }
+.stack { display:flex; flex-direction:column; gap:12px; }
+.row { display:flex; align-items:center; gap:12px; }
+.icon-btn { width:44px; height:44px; border-radius:50%; display:grid; place-items:center; flex:none; background:#fff; box-shadow:var(--shadow); }
+.pill { height:36px; padding:0 14px; border-radius:999px; background:#fff; box-shadow:var(--shadow); font-size:14px; font-weight:600; display:inline-flex; align-items:center; gap:6px; }
+.cta { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:60px; border-radius:999px; background:var(--p); color:#fff; font-size:18px; font-weight:700; box-shadow:0 8px 24px rgba(63,158,143,.28); }
+.cta.soft { background:var(--p4); color:var(--p); box-shadow:none; }
+.cta:disabled { opacity:.4; }
+.dock { position:fixed; left:0; right:0; bottom:0; padding:12px 16px calc(env(safe-area-inset-bottom) + 16px); background:linear-gradient(transparent, var(--bg) 30%); display:flex; gap:10px; max-width:560px; margin:0 auto; z-index:5; }
+.spin { width:28px; height:28px; border:3px solid var(--p4); border-top-color:var(--p); border-radius:50%; animation:r 1s linear infinite; }
+@keyframes r { to { transform:rotate(360deg); } }
+.loading { display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; padding:100px 24px; }
+.tag { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700; background:var(--p5); color:var(--p); }
+.tag.warn { background:var(--w5); color:var(--wT); }
+.tag.ok { background:var(--ok5); color:var(--ok); }
+.disc { font-size:12px; line-height:1.5; color:var(--sub); text-align:center; margin:20px 8px 0; }
+
+/* ---------- 学习者：大、安静、一次一件事 ---------- */
+.L { font-size:20px; }
+.taskcard { display:flex; align-items:center; gap:16px; width:100%; text-align:left; padding:14px; border-radius:28px; background:#fff; box-shadow:var(--shadow); }
+.taskcard img, .taskcard .ph { width:96px; height:96px; border-radius:20px; object-fit:cover; background:var(--p5); flex:none; }
+.taskcard b { font-size:22px; display:block; }
+.stepimg { width:100%; aspect-ratio:1; border-radius:28px; overflow:hidden; background:#fff; box-shadow:var(--shadow); position:relative; }
+.stepimg img { width:100%; height:100%; object-fit:cover; display:block; transform-origin:50% 45%; }
+.stepimg img.play { animation:kb var(--dur,6s) ease-in-out both; }
+.stepimg.anim img { position:absolute; inset:0; }
+.stepimg.anim .fb { animation:ab var(--dur,2.6s) ease-in-out infinite; }
+.stepimg.anim.static .fb { animation:none; }
+@keyframes ab { 0%, 22% { opacity:0; } 42%, 88% { opacity:1; } 100% { opacity:0; } }
+@keyframes kb { 0% { transform:scale(1); } 60% { transform:scale(1.18); } 100% { transform:scale(1.12); } }
+.steptext { font-size:30px; font-weight:800; line-height:1.25; text-align:center; margin:22px 8px 6px; letter-spacing:-.3px; }
+.cue { font-size:64px; font-weight:800; text-align:center; color:var(--p); margin:40px 0 10px; }
+.dots { display:flex; justify-content:center; gap:8px; margin:14px 0 0; }
+.dots i { width:12px; height:12px; border-radius:50%; background:var(--p4); }
+.dots i.on { background:var(--p); transform:scale(1.25); }
+.dots i.done { background:var(--p2); }
+.three { position:fixed; left:0; right:0; bottom:0; display:grid; grid-template-columns:1fr 1fr 1.4fr; gap:10px; padding:12px 16px calc(env(safe-area-inset-bottom) + 16px); background:linear-gradient(transparent, var(--bg) 25%); max-width:560px; margin:0 auto; }
+.big { min-height:76px; border-radius:24px; background:#fff; box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-size:15px; font-weight:700; }
+.big svg { width:28px; height:28px; }
+.big.go { background:var(--p); color:#fff; font-size:18px; }
+.big.on { background:var(--p4); color:var(--p); }
+.safety { display:flex; gap:10px; align-items:center; padding:12px 16px; border-radius:18px; background:var(--w5); color:var(--wT); font-size:17px; font-weight:700; margin-top:12px; }
+.cam { position:relative; width:100%; aspect-ratio:4/3; border-radius:24px; overflow:hidden; background:var(--p5); margin-top:14px; }
+.cam video { width:100%; height:100%; object-fit:cover; display:block; }
+.cam .mark { position:absolute; inset:0; display:grid; place-items:center; background:rgba(63,158,143,.16); opacity:0; transition:opacity .3s; }
+.cam .mark.on { opacity:1; }
+.cam .mark span { width:120px; height:120px; border-radius:50%; background:var(--p); display:grid; place-items:center; box-shadow:0 10px 40px rgba(63,158,143,.4); }
+.cam .look { position:absolute; left:12px; top:12px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.92); font-size:14px; font-weight:700; color:var(--p); display:flex; align-items:center; gap:8px; }
+.cam .look i { width:8px; height:8px; border-radius:50%; background:var(--p); animation:pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity:.25; } }
+.gentle { margin-top:12px; padding:14px 16px; border-radius:18px; background:var(--p5); color:var(--ink); font-size:20px; font-weight:700; text-align:center; }
+.agchip { display:inline-block; padding:3px 10px; border-radius:999px; color:#fff; font-size:12px; font-weight:800; }
+.agflow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; } .agflow .arr { color:var(--sub); }
+.agnew { margin-top:6px; padding:10px 12px; border-radius:12px; background:var(--p5); font-size:15px; }
+.aghl { display:flex; gap:10px; align-items:center; padding:10px 0; border-top:1px solid var(--line); } .aghl:first-child { border-top:0; }
+.aglog { display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-top:1px solid var(--line); } .aglog:first-child { border-top:0; }
+.coachbub { display:flex; gap:12px; align-items:flex-start; margin-top:18px; }
+.coachbub .av { flex:none; width:52px; height:52px; border-radius:50%; background:var(--p); display:grid; place-items:center; }
+.coachbub .bub { flex:1; padding:16px 18px; border-radius:6px 22px 22px 22px; background:#fff; box-shadow:var(--shadow); font-size:23px; font-weight:700; line-height:1.35; }
+.mic.big { width:100%; margin-top:22px; min-height:120px; font-size:24px; }
+.taskcard.slim { display:flex; justify-content:space-between; align-items:center; padding:18px 20px; min-height:0; }
+.cam .flip { position:absolute; right:12px; top:12px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.92); font-size:13px; font-weight:700; color:var(--p); }
+.cam .seeing { position:absolute; left:12px; right:12px; bottom:12px; padding:10px 14px; border-radius:14px; background:rgba(34,48,45,.78); color:#fff; font-size:17px; font-weight:700; line-height:1.3; }
+.stopnow { margin-top:14px; padding:22px; border-radius:22px; background:#B83A2A; color:#fff; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
+.stopnow b { font-size:30px; } .stopnow span { font-size:20px; }
+.hold { position:relative; overflow:hidden; width:100%; margin-top:12px; min-height:56px; border-radius:18px; background:#fff; border:2px dashed var(--p2); color:var(--sub); font-size:15px; font-weight:700; touch-action:none; user-select:none; -webkit-user-select:none; }
+.hold i { position:absolute; left:0; top:0; bottom:0; width:0; background:var(--p4); }
+.hold.on i { width:100%; transition:width 2s linear; } .hold span { position:relative; }
+.livecard { display:grid; grid-template-columns:96px 1fr; gap:12px; align-items:center; }
+.livecard img { width:96px; height:96px; object-fit:cover; border-radius:14px; background:var(--p5); }
+.livecard .alert { color:#B83A2A; font-weight:800; font-size:14px; }
+.cell .vm { position:absolute; right:3px; bottom:2px; font-size:9px; font-weight:800; opacity:.8; }
+.cell .fl { position:absolute; left:3px; top:3px; width:6px; height:6px; border-radius:50%; background:#F0614F; }
+.mini { display:flex; gap:10px; margin-top:12px; }
+.mini button { flex:1; min-height:56px; border-radius:18px; background:#fff; box-shadow:var(--shadow); font-size:16px; font-weight:700; }
+.yay { text-align:center; padding-top:60px; }
+.yay .ring { width:140px; height:140px; border-radius:50%; background:var(--p); margin:0 auto 24px; display:grid; place-items:center; box-shadow:0 14px 50px rgba(63,158,143,.35); animation:pop .5s ease-out both; }
+@keyframes pop { from { transform:scale(.6); opacity:0; } }
+.mic { width:100%; min-height:120px; border-radius:28px; background:#fff; box-shadow:var(--shadow); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; font-size:20px; font-weight:800; }
+.mic.rec { background:var(--p); color:#fff; }
+
+/* ---------- 照顾者 ---------- */
+.tabs { display:flex; gap:8px; margin:16px 0; overflow-x:auto; }
+.tab { height:40px; padding:0 18px; border-radius:999px; background:#fff; font-size:15px; font-weight:600; white-space:nowrap; }
+.tab.on { background:var(--p); color:#fff; }
+.bar { height:8px; border-radius:99px; background:var(--p4); overflow:hidden; }
+.bar i { display:block; height:100%; background:var(--p); border-radius:99px; }
+.steprow { display:grid; grid-template-columns:72px 1fr; gap:12px; align-items:start; padding:12px 0; }
+.steprow + .steprow { border-top:1px solid var(--line); }
+.steprow .th { width:72px; height:72px; border-radius:14px; background:var(--p5); overflow:hidden; display:grid; place-items:center; }
+.steprow .th img { width:100%; height:100%; object-fit:cover; }
+.steprow input { width:100%; border:0; border-bottom:1px dashed var(--p3); padding:4px 0; font-size:16px; font-weight:700; background:transparent; outline:none; }
+.steprow input:focus { border-bottom-color:var(--p); }
+.steprow .meta { font-size:13px; color:var(--sub); margin-top:4px; }
+.field { width:100%; border:1.5px solid var(--p4); border-radius:16px; padding:14px; font-size:17px; background:#fff; outline:none; }
+.field:focus { border-color:var(--p); }
+.upl { display:flex; align-items:center; justify-content:center; gap:10px; min-height:140px; border-radius:20px; border:2px dashed var(--p3); background:var(--p5); color:var(--p); font-weight:700; overflow:hidden; position:relative; }
+.upl img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.legend { display:flex; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--sub); margin-top:10px; }
+.legend span { display:inline-flex; align-items:center; gap:5px; }
+.legend i { width:12px; height:12px; border-radius:4px; display:inline-block; }
+.kpi { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.kpi div { background:var(--p5); border-radius:16px; padding:12px; }
+.kpi b { display:block; font-size:24px; font-weight:800; }
+.kpi span { font-size:12px; color:var(--sub); }
+.switch { display:flex; padding:4px; border-radius:999px; background:#fff; box-shadow:var(--shadow); }
+.switch button { white-space:nowrap; height:36px; padding:0 14px; border-radius:999px; font-size:14px; font-weight:700; color:var(--sub); }
+.switch button.on { background:var(--p); color:#fff; }
+.sheet { overflow-x:auto; }
+.sheet table { border-collapse:separate; border-spacing:4px; }
+.sheet th { font-size:11px; color:var(--sub); font-weight:600; white-space:nowrap; }
+.sheet th span { display:block; font-weight:400; font-size:10px; }
+.sheet th.st { text-align:left; position:sticky; left:0; background:#fff; color:var(--ink); font-size:12.5px; max-width:150px; white-space:normal; padding-right:6px; z-index:1; }
+.sheet .cell { width:38px; height:32px; border-radius:8px; font-size:13px; font-weight:800; border:1px solid #BFE3DC; position:relative; }
+.sheet .cell .ed { position:absolute; top:3px; right:3px; width:5px; height:5px; border-radius:50%; background:#F0614F; }
+.sheet tr.pct td { font-size:11px; font-weight:700; color:var(--p); text-align:center; }
+.sheetpick { position:fixed; left:0; right:0; bottom:0; z-index:9; background:#fff; border-radius:24px 24px 0 0; padding:18px 16px calc(env(safe-area-inset-bottom) + 18px); box-shadow:0 -10px 40px rgba(0,0,0,.12); max-width:560px; margin:0 auto; }
+.codes { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+.codes button { min-height:56px; border-radius:14px; border:1px solid #BFE3DC; text-align:left; padding:8px 12px; display:flex; flex-direction:column; }
+.codes button b { font-size:17px; } .codes button span { font-size:12px; opacity:.85; }
+.recrow { padding:12px 0; } .recrow + .recrow { border-top:1px solid var(--line); }
+.codes1 { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-top:10px; }
+.codes1 button { height:44px; border-radius:12px; background:var(--p5); font-weight:800; font-size:15px; color:var(--ink); }
+.codes1 button.on { background:var(--p); color:#fff; }
+</style>
+</head>
+<body>
+<section class="view" id="lhome"></section>
+<section class="view" id="lask"></section>
+<section class="view" id="lstep"></section>
+<section class="view" id="lpractice"></section>
+<section class="view" id="ldone"></section>
+<section class="view" id="chome"></section>
+<section class="view" id="cnew"></section>
+<section class="view" id="ctask"></section>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const K = new URLSearchParams(location.search).get('k') || '';
+const kq = K ? `?k=${encodeURIComponent(K)}` : '';
+async function api(path, opt = {}) {
+  const o = { method: opt.method || (opt.body ? 'POST' : 'GET'), headers: { 'x-k': K } };
+  if (opt.json !== undefined) { o.method = opt.method || 'POST'; o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opt.json); }
+  else if (opt.body) o.body = opt.body;
+  const r = await fetch(path, o);
+  if (!r.ok) throw new Error((await r.text()).slice(0, 200));
+  return r.json();
+}
+api.url = path => path + (K ? (path.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(K) : '');
+const cardUrl = (t, i) => `/api/tasks/${t.id}/cards/${i}.png${kq}${kq ? '&' : '?'}v=${t.steps[i].card?.v || 0}`;
+const frameUrl = (t, i) => `/api/tasks/${t.id}/cards/${i}a.png${kq}${kq ? '&' : '?'}v=${t.steps[i].card?.v || 0}`;
+// 图卡小动画：“动作之前”和“动作中”两帧循环过渡（约 2.6 秒；慢速 4.5 秒）。旧任务没有前一帧就显示静态图。
+function anim(t, i, style = '') {
+  return `<div class="stepimg anim" style="--dur:${SLOW ? 4.5 : 2.6}s;${style}"><img class="fa" src="${frameUrl(t, i)}" alt="" onerror="this.parentNode.classList.add('static');this.remove()"><img class="fb" src="${cardUrl(t, i)}" alt="${esc(t.steps[i].text)}"></div>`;
+}
+const hasPic = (t, i) => !!(t.steps[i].photo || ['ready', 'check', 'photo'].includes(t.steps[i].card?.state));
+const photoUrl = t => `/api/tasks/${t.id}/photo.jpg${kq}`;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const loading = (a, b = '') => `<div class="loading"><div class="spin"></div><div style="font-size:20px;font-weight:800">${a}</div><div class="sub">${b}</div></div>`;
+// 当前学生（学生端）：?s=<id> 或上次选择的；老师端用 CSTU 选中的学生
+let STUDENTS = [], ME = null;
+try { ME = new URLSearchParams(location.search).get('s') || localStorage.getItem('student'); } catch (e) {}
+const nameOf = id => (STUDENTS.find(x => x.id === id) || {}).name || 'Student';
+async function loadStudents() { try { STUDENTS = await api('/api/students'); } catch (e) { STUDENTS = []; } }
+
+const I = {
+  back: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#22302D" stroke-width="2.4" stroke-linecap="round"><path d="m15 6-6 6 6 6"/></svg>',
+  again: c => `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>`,
+  slow: c => `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16c0-4.4 3.6-8 8-8s8 3.6 8 8"/><path d="M2 16h20M8 16v2M16 16v2"/><circle cx="20.5" cy="11" r="1.5"/></svg>`,
+  next: c => `<svg viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`,
+  check: (c, s = 64) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>`,
+  mic: c => `<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>`,
+  cam: c => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3"/></svg>`,
+  hand: c => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4.5a1.5 1.5 0 0 1 3 0V11M14 10.5V6a1.5 1.5 0 0 1 3 0v7c0 4-2.5 7-6 7-2.5 0-4-1.2-5.5-3.5L4 14a1.5 1.5 0 0 1 2.6-1.5L8 14"/></svg>`,
+  warn: c => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg>`,
+};
+
+/* ---------- 路由：#learn = 学习者，#care = 照顾者 ---------- */
+let VIEW = '';
+function show(v) { document.querySelectorAll('.view').forEach(e => e.classList.toggle('on', e.id === v)); VIEW = v; window.scrollTo(0, 0); }
+function route() {
+  stopCam(); hush();
+  const h = location.hash || '#learn';
+  if (h.startsWith('#care')) { const id = h.split('/')[1]; id ? openTask(id) : careHome(); }
+  else learnHome();
+}
+window.addEventListener('hashchange', route);
+
+/* ---------- 声音：优先老师录的真人声音；没有就用这台设备上最自然的系统声音 ---------- */
+let SLOW = false, AUD = null;
+// 系统里那些听起来像机器人/搞怪的声音，排到最后
+const ROBOT = /Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Wobble|Zarvox|Trinoids|Whisper|Jester|Organ|Superstar|Ralph|Kathy|Junior|Grandma|Grandpa|Rocko|Shelley|Flo|Eddy|Reed|Sandy|Fred|Good News|Hysterical|Deranged|Pipe/i;
+function voiceScore(v) {
+  let s = 0;
+  if (/^en[-_]US/i.test(v.lang)) s += 3; else if (/^en/i.test(v.lang)) s += 1; else return -99;
+  if (/Premium|Enhanced|Natural|Neural|Online/i.test(v.name)) s += 10;          // iOS/macOS 高质量声音、Edge 神经网络声音
+  if (/Ava|Zoe|Evan|Allison|Susan|Nicky|Joelle|Noelle|Nathan|Tom|Google US English|Aria|Jenny|Guy|Michelle/i.test(v.name)) s += 4;
+  if (/Samantha/i.test(v.name)) s += 1;
+  if (ROBOT.test(v.name)) s -= 20;
+  return s;
+}
+function voices() { try { return speechSynthesis.getVoices().filter(v => voiceScore(v) > -50).sort((a, b) => voiceScore(b) - voiceScore(a)); } catch (e) { return []; } }
+function myVoice() {
+  let pick = null; try { pick = localStorage.getItem('voice'); } catch (e) {}
+  const vs = voices(); return vs.find(v => v.name === pick) || vs[0] || null;
+}
+function hush() { try { speechSynthesis.cancel(); } catch (e) {} if (AUD) { AUD.pause(); AUD = null; } }
+function say(text, rate) {
+  if (!text) return;
+  try {
+    hush();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = myVoice(); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
+    u.rate = rate || (SLOW ? 0.7 : 0.95); u.pitch = 1.0;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+// 读一步：老师录过这一步就放老师的声音
+function sayStep(t, i, extra) {
+  const s = t.steps[i];
+  if (s.voice) {
+    hush(); AUD = new Audio(api.url(`/api/tasks/${t.id}/voice/${s.voice}`)); AUD.playbackRate = SLOW ? 0.8 : 1;
+    AUD.play().catch(() => say(s.text + (extra ? '. ' + extra : '')));
+    if (extra) AUD.onended = () => say(extra);
+    return;
+  }
+  say(s.text + (extra ? '. ' + extra : ''));
+}
+
+async function learnHome() {
+  show('lhome'); $('#lhome').innerHTML = loading('');
+  await loadStudents();
+  if (!ME || !STUDENTS.find(x => x.id === ME)) {   // 谁在练习？
+    $('#lhome').innerHTML = `<h1 style="margin-top:12px">Who is practicing?</h1>
+      <div class="stack" style="margin-top:20px">${STUDENTS.map(x => `<button class="taskcard" onclick="pickMe('${x.id}')"><div class="ph" style="display:grid;place-items:center;font-size:40px;font-weight:800;color:var(--p)">${esc(x.name[0] || '?')}</div><b>${esc(x.name)}</b></button>`).join('') || '<p class="sub L">Your teacher adds students first.</p>'}</div>
+      <p class="disc"><a href="#care" style="color:var(--sub)">Teacher view</a></p>`;
+    return;
+  }
+  let tasks = [];
+  try { tasks = (await api('/api/tasks?student=' + ME)).filter(t => t.approved); } catch (e) {}
+  TASKS = tasks;
+  renderHome(`Hi ${nameOf(ME)}! What do you want to do today?`);
+  say(`Hi ${nameOf(ME)}! What do you want to do today?`);
+}
+let TASKS = [];
+function renderHome(bubble, busy) {
+  $('#lhome').innerHTML = `
+    <div class="coachbub"><div class="av">${I.hand('#fff')}</div><div class="bub">${esc(bubble)}</div></div>
+    <button class="mic big ${REC ? 'rec' : ''}" onclick="talk()" ${busy ? 'disabled' : ''}>${I.mic(REC ? '#fff' : '#3F9E8F')}${REC ? 'Listening… tap when done' : busy ? 'Thinking…' : 'Tap and tell me'}</button>
+    ${TASKS.length ? `<div class="sub" style="margin:22px 4px 8px;font-size:16px">Or pick one</div>
+    <div class="stack">${TASKS.map(t => `<button class="taskcard slim" onclick="coachStart('${t.id}')"><b>${esc(t.title)}</b><span class="sub" style="font-size:15px">${t.n_steps} steps</span></button>`).join('')}</div>` : ''}
+    <p class="disc"><a href="#" onclick="pickMe(null);return false" style="color:var(--sub)">Not ${esc(nameOf(ME))}?</a> · <a href="#care" style="color:var(--sub)">Teacher view</a></p>`;
+}
+// 按一下说话，再按一下停；转成文字后交给后端去找老师批准过的任务
+async function listen(onText, onState) {
+  if (REC) { REC.stop(); return; }
+  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { onText(null); return; }
+  hush();
+  const chunks = [], r = REC = new MediaRecorder(stream);
+  r.ondataavailable = e => chunks.push(e.data);
+  r.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop()); const type = r.mimeType; REC = null; onState?.('busy');
+    const fd = new FormData(); fd.append('audio', new Blob(chunks, { type }), type.includes('mp4') ? 'a.mp4' : 'a.webm');
+    try { onText((await api('/api/transcribe', { body: fd })).text.replace(/\.+$/, '')); } catch (e) { onText(null); }
+  };
+  r.start(); onState?.('rec');
+  setTimeout(() => { if (REC === r) r.stop(); }, 8000);
+}
+function talk() {
+  listen(async said => {
+    if (!said) { renderHome("Sorry, I didn't hear that. Try again, or pick one below."); say("Sorry, I didn't hear that."); return; }
+    renderHome(`You said: “${said}”`, true);
+    let r; try { r = await api('/api/intent', { json: { student: ME, said } }); } catch (e) { r = { task_id: null, say: 'Something went wrong. Try again.' }; }
+    say(r.say);
+    if (r.task_id) { renderHome(r.say, true); await wait(1800); coachStart(r.task_id); }
+    else renderHome(r.say);
+  }, st => renderHome(st === 'rec' ? 'I am listening…' : 'Let me think…', st === 'busy'));
+}
+async function coachStart(id) { T = await api(`/api/tasks/${id}`); practice(); }
+function pickMe(id) { ME = id; try { id ? localStorage.setItem('student', id) : localStorage.removeItem('student'); } catch (e) {} learnHome(); }
+
+let REC = null;
+/* ---------- 学习者：我想学…（说一句话 + 可拍一张照片） ---------- */
+let ASK = { text: '', photo: null };
+function learnAsk() {
+  show('lask'); ASK = { text: '', photo: null };
+  renderAsk();
+}
+function renderAsk(msg) {
+  $('#lask').innerHTML = `
+    <div class="top"><button class="icon-btn" onclick="location.hash='#learn';route()" aria-label="Back">${I.back}</button></div>
+    <h1 style="margin-top:12px">Say what you want to learn</h1>
+    <div class="stack" style="margin-top:20px">
+      <button class="mic ${REC ? 'rec' : ''}" id="micBtn" onclick="toggleRec()">${I.mic(REC ? '#fff' : '#3F9E8F')}${REC ? 'Listening… tap to stop' : 'Tap and talk'}</button>
+      <input class="field" id="askText" placeholder="or type it here" value="${esc(ASK.text)}" oninput="ASK.text=this.value" style="font-size:20px">
+      <label class="upl">${ASK.photo ? `<img src="${URL.createObjectURL(ASK.photo)}" alt="">` : `${I.cam('#3F9E8F')} Take a photo of it`}
+        <input type="file" accept="image/*" capture="environment" hidden onchange="ASK.photo=this.files[0];renderAsk()"></label>
+      ${msg ? `<div class="gentle">${msg}</div>` : ''}
+    </div>
+    <div class="dock"><button class="cta" onclick="sendAsk()" ${ASK.text.trim() ? '' : 'disabled'}>Ask my teacher</button></div>`;
+}
+async function toggleRec() {
+  if (REC) { REC.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const chunks = []; REC = new MediaRecorder(stream);
+    REC.ondataavailable = e => chunks.push(e.data);
+    REC.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop()); const type = REC.mimeType; REC = null;
+      renderAsk('Listening back…');
+      const fd = new FormData(); fd.append('audio', new Blob(chunks, { type }), type.includes('mp4') ? 'a.mp4' : 'a.webm');
+      try { ASK.text = (await api('/api/transcribe', { body: fd })).text.replace(/\.+$/, ''); renderAsk(); }
+      catch (e) { renderAsk('I could not hear that. Try again or type it.'); }
+    };
+    REC.start(); renderAsk();
+  } catch (e) { renderAsk('The microphone is not available. You can type instead.'); }
+}
+async function sendAsk() {
+  const fd = new FormData(); fd.append('goal', ASK.text.trim()); if (ASK.photo) fd.append('photo', ASK.photo);
+  $('#lask').innerHTML = loading('Making your steps…', 'This takes about 15 seconds');
+  try {
+    await api('/api/tasks', { body: fd });
+    $('#lask').innerHTML = `<div class="yay"><div class="ring">${I.check('#fff', 72)}</div><h1>Sent to your teacher</h1>
+      <p class="sub L">Your teacher will check the steps. Then it shows up here.</p></div>
+      <div class="dock"><button class="cta" onclick="location.hash='#learn';route()">OK</button></div>`;
+    say('Sent to your teacher.');
+  } catch (e) { renderAsk('Something went wrong. Please try again.'); }
+}
+
+/* ---------- 学习者：选“看”还是“做” ---------- */
+let T = null, MODE = 'learn', IDX = 0;
+async function startTask(id) {
+  T = await api(`/api/tasks/${id}`);
+  show('lstep');
+  $('#lstep').innerHTML = `
+    <div class="top"><button class="icon-btn" onclick="location.hash='#learn';route()" aria-label="Back">${I.back}</button></div>
+    <div class="stepimg" style="margin-top:12px">${T.has_photo ? `<img src="${photoUrl(T)}" alt="">` : `<img src="${cardUrl(T, 0)}" alt="">`}</div>
+    <div class="steptext">${esc(T.title)}</div>
+    <div class="stack" style="margin-top:20px">
+      <button class="cta soft" style="min-height:76px;font-size:22px" onclick="learnMode()">Watch the steps</button>
+      <button class="cta" style="min-height:76px;font-size:22px" onclick="practice()">I'll do it</button>
+    </div>`;
+  say(T.title);
+}
+
+/* ---------- 学：一步一屏 ---------- */
+function learnMode() { MODE = 'learn'; IDX = 0; renderLearn(); }
+function dots(n, at) { return `<div class="dots">${Array.from({ length: n }, (_, i) => `<i class="${i === at ? 'on' : i < at ? 'done' : ''}"></i>`).join('')}</div>`; }
+function renderLearn() {
+  const s = T.steps[IDX];
+  $('#lstep').innerHTML = `
+    <div class="top"><button class="icon-btn" onclick="startTask('${T.id}')" aria-label="Back">${I.back}</button>${dots(T.steps.length, IDX)}<span style="width:44px"></span></div>
+    ${hasPic(T, IDX) ? anim(T, IDX, 'margin-top:12px') : ''}
+    <div class="steptext" style="${hasPic(T, IDX) ? '' : 'font-size:34px;margin-top:40px'}">${esc(s.text)}</div>
+    ${s.safety ? `<div class="safety">${I.warn('#B83A2A')}${esc(s.safety)}</div>` : ''}
+    <div class="three">
+      <button class="big" onclick="renderLearn()">${I.again('#3F9E8F')}Again</button>
+      <button class="big ${SLOW ? 'on' : ''}" onclick="SLOW=!SLOW;renderLearn()">${I.slow('#3F9E8F')}Slower</button>
+      <button class="big go" onclick="learnNext()">${I.next('#fff')}${IDX === T.steps.length - 1 ? 'Done' : 'Next'}</button>
+    </div>`;
+  sayStep(T, IDX, s.safety);
+}
+function learnNext() {
+  if (IDX < T.steps.length - 1) { IDX++; renderLearn(); return; }
+  show('ldone');
+  $('#ldone').innerHTML = `<div class="yay"><div class="ring">${I.check('#fff', 72)}</div><h1>You watched all the steps</h1><p class="sub L">Ready to try it?</p></div>
+    <div class="dock" style="flex-direction:column"><button class="cta" onclick="show('lstep');practice()">I'll do it</button><button class="cta soft" onclick="location.hash='#learn';route()">Later</button></div>`;
+  say('You watched all the steps. Ready to try it?');
+}
+
+/* ---------- 练：镜头一边看一边提示；不能自己跳步 ----------
+   每一步要么镜头看到做完（连续两次），要么老师确认（在旁边按住确认，或在老师端点“这步做完了”）。
+   没有“我做完了”的自报按钮：学生自己点的不算数。 */
+let SESS = null, STREAM = null, RUN = false, ST = null;
+const LV = ['independent', 'word', 'picture', 'model'];
+function stopCam() { RUN = false; STREAM?.getTracks().forEach(t => t.stop()); STREAM = null; }
+async function practice() {
+  MODE = 'practice'; IDX = 0; show('lpractice');
+  $('#lpractice').innerHTML = loading('Getting ready…');
+  try { SESS = await api(`/api/tasks/${T.id}/sessions`, { json: { student: ME } }); } catch (e) { $('#lpractice').innerHTML = loading('Could not start', esc(e.message)); return; }
+  await openCam();
+  RUN = true;
+  if (STREAM) await readyPhase();
+  if (!RUN) return;
+  beginStep();
+  judgeLoop(); confirmLoop();
+}
+// 开始前：看看桌上要用的东西齐不齐（最多看 5 次，或学生点"Let's start"）
+let GO = false;
+async function readyPhase() {
+  GO = false;
+  const paint = msg => {
+    $('#lpractice').innerHTML = `
+      <div class="top"><button class="icon-btn" onclick="quitPractice()" aria-label="Stop">${I.back}</button><b style="font-size:18px">${esc(T.title)}</b><span style="width:44px"></span></div>
+      <div class="coachbub" style="margin-top:14px"><div class="av">${I.hand('#fff')}</div><div class="bub">${esc(msg)}</div></div>
+      <div class="cam"><video id="pv" playsinline muted autoplay style="${CAM === 'user' ? 'transform:scaleX(-1)' : ''}"></video>
+        <button class="flip" onclick="flipCam().then(()=>paintReady())">${CAM === 'user' ? 'Front camera' : 'Back camera'} ⇄</button></div>
+      <div class="dock"><button class="cta" onclick="GO=true">Let's start</button></div>`;
+    const v = $('#pv'); v.srcObject = STREAM; v.play().catch(() => {});
+  };
+  window.paintReady = () => paint(LAST);
+  let LAST = `Let's ${T.title.toLowerCase()}! Put the phone where I can see your hands and the table.`;
+  paint(LAST); say(LAST);
+  await wait(3500);
+  for (let k = 0; k < 5 && RUN && !GO; k++) {
+    const b = await grab(); if (!b) { await wait(800); continue; }
+    const fd = new FormData(); fd.append('frames', b, 'f.jpg');
+    let r; try { r = await api(`/api/tasks/${T.id}/ready`, { body: fd }); } catch (e) { break; }
+    if (!RUN || GO) break;
+    if (r.say && r.say !== LAST) { LAST = r.say; paint(LAST); say(LAST); }
+    if (!(r.missing || []).length) { await wait(2500); break; }
+    for (let w = 0; w < 12 && !GO; w++) await wait(500);
+  }
+}
+// 摄像头：默认前置（手机立在面前、对着学生，双手都能用来做）；可以切到后置
+let CAM = 'user'; try { CAM = localStorage.getItem('cam') || 'user'; } catch (e) {}
+async function openCam() {
+  STREAM?.getTracks().forEach(t => t.stop()); STREAM = null;
+  try { STREAM = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: CAM, width: { ideal: 1280 } } }); }
+  catch (e) { STREAM = null; }
+}
+async function flipCam() {
+  CAM = CAM === 'user' ? 'environment' : 'user'; try { localStorage.setItem('cam', CAM); } catch (e) {}
+  await openCam(); FR = []; if (ST) renderPractice(false);
+}
+// 灵活顺序：DONE = 做完的步骤；IDX = 现在关注的那一步（模型认出学生在做哪一步就切过去）
+let DONE = new Set(), STS = {};
+const FLEX = () => (T.order || 'flex') === 'flex';
+const needsOf = i => T.steps[i].needs ?? (i ? [i - 1] : []);
+const availSteps = () => T.steps.map((_, i) => i).filter(i => !DONE.has(i) && (FLEX() ? needsOf(i).every(j => DONE.has(j)) : i === Math.min(...T.steps.map((_, k) => k).filter(k => !DONE.has(k)))));
+function focusStep(i, speak) {
+  IDX = i;
+  ST = STS[i] = STS[i] || { t0: Date.now(), errors: 0, prompted: false, help: false, done: 0, unclear: 0, shown: SESS.levels[i], hint: '', seeing: '',
+         status: '', finishing: false, spokeAt: Date.now(), spoken: '', stop: false, lastBad: '' };
+  ST.finishing = false; ST.done = 0;
+  renderPractice(speak);
+}
+function beginStep() { DONE = new Set(); STS = {}; focusStep(availSteps()[0] ?? 0, true); }
+function stepDots() { return `<div class="dots">${T.steps.map((_, i) => `<i class="${i === IDX ? 'on' : DONE.has(i) ? 'done' : ''}"></i>`).join('')}</div>`; }
+const STAT = { done: ['#3F9E8F', 'Looks done…'], working: ['#3F9E8F', 'Watching'], not_started: ['#6B7875', 'Watching'], idle: ['#6B7875', 'Watching'], too_early: ['#B83A2A', 'Wait'],
+  wrong: ['#B83A2A', 'Not quite'], ahead: ['#B83A2A', 'Wait'], unsafe: ['#B83A2A', 'Stop'], unclear: ['#6B7875', "Can't see"] };
+function renderPractice(speak) {
+  const s = T.steps[IDX], lv = ST.shown;
+  let prompt = '';
+  if (lv >= 2 && !hasPic(T, IDX)) prompt = `<div class="steptext" style="font-size:30px;margin-top:6px">${esc(s.text)}</div>`;
+  else if (lv === 3) prompt = `${anim(T, IDX)}<div class="steptext" style="font-size:26px;margin-top:14px">${esc(s.text)}</div>`;
+  else if (lv === 2) prompt = `<div class="stepimg" style="width:62%;margin:0 auto"><img src="${cardUrl(T, IDX)}" alt=""></div><div class="steptext" style="font-size:26px;margin-top:14px">${esc(s.text)}</div>`;
+  else if (lv === 1) prompt = `<div class="cue">${esc(s.cue || s.text)}</div>`;
+  else prompt = `<div class="cue" style="font-size:40px;color:var(--p2)">${DONE.size} of ${T.steps.length} done</div>`;
+  const other = FLEX() ? availSteps().filter(i => i !== IDX) : [];
+  if (other.length && lv >= 1) prompt += `<div class="sub" style="text-align:center;font-size:16px;margin-top:6px">Or you can: ${other.map(i => esc(T.steps[i].cue || T.steps[i].text)).join(' · ')}</div>`;
+  const needT = ST.help || ST.stop || !STREAM;
+  $('#lpractice').innerHTML = `
+    <div class="top"><button class="icon-btn" onclick="quitPractice()" aria-label="Stop">${I.back}</button>${stepDots()}<span style="width:44px"></span></div>
+    ${ST.stop ? `<div class="stopnow">${I.warn('#fff')}<b>Stop. Put it down.</b><span>Wait for your teacher.</span></div>` : `<div style="margin-top:12px">${prompt}</div>`}
+    ${(s.hazards || []).length && lv >= 1 && !ST.stop ? `<div class="safety">${I.warn('#B83A2A')}${esc(s.safety || 'Careful. Your teacher should be close by.')}</div>` : ''}
+    <div class="gentle" id="hint" style="${ST.hint ? '' : 'display:none'}">${esc(ST.hint)}</div>
+    <div class="cam"><video id="pv" playsinline muted autoplay style="${CAM === 'user' ? 'transform:scaleX(-1)' : ''}"></video>
+      ${navigator.mediaDevices ? `<button class="flip" onclick="flipCam()" aria-label="Switch camera">${CAM === 'user' ? 'Front camera' : 'Back camera'} ⇄</button>` : ''}
+      <div class="look" id="look"><i></i>${STREAM ? 'Watching' : 'No camera'}</div>
+      <div class="seeing" id="seeing" style="${ST.seeing ? '' : 'display:none'}">${esc(ST.seeing)}</div>
+      <div class="mark" id="mark"><span>${I.check('#fff', 72)}</span></div></div>
+    <div class="mini">
+      ${lv < 3 ? `<button onclick="showMe()">Show me</button>` : `<button onclick="renderPractice(true)">Again</button>`}
+      <button id="askBtn" onclick="askCoach()">${I.mic('#3F9E8F')} Ask</button>
+      <button onclick="getHelp()" ${ST.help ? 'disabled' : ''}>${I.hand('#3F9E8F')} ${ST.help ? 'Teacher is coming' : 'Help'}</button>
+    </div>
+    ${needT ? `<button class="hold" id="hold" onpointerdown="holdStart(event)" onpointerup="holdEnd()" onpointerleave="holdEnd()"><i></i><span>Teacher: hold 2 seconds when this step is done</span></button>` : ''}
+    ${!STREAM ? `<p class="disc">The camera is off, so your teacher checks each step.</p>` : ''}`;
+  if (STREAM) { const v = $('#pv'); v.srcObject = STREAM; v.play().catch(() => {}); }
+  if (speak && !ST.stop) { ST.spokeAt = Date.now(); lv >= 2 ? sayStep(T, IDX) : say(lv === 1 ? (s.cue || s.text) : ''); }
+}
+// 只更新镜头上的字，不重画整页（避免画面闪）
+function paintLive() {
+  const sEl = $('#seeing'), h = $('#hint'), l = $('#look');
+  if (sEl) { sEl.textContent = ST.seeing || ''; sEl.style.display = ST.seeing ? '' : 'none'; }
+  if (h) { h.textContent = ST.hint || ''; h.style.display = ST.hint ? '' : 'none'; }
+  if (l) { const [c, w] = STAT[ST.status] || STAT.working; l.innerHTML = `<i style="background:${c}"></i>${w}`; }
+}
+// 少说话：同一句 20 秒内不重复，两次提示之间至少 8 秒；出错/危险立刻说
+function coachSay(text, urgent) {
+  if (!text) return;
+  const now = Date.now();
+  if (!urgent && (now - ST.spokeAt < 8000 || (text === ST.spoken && now - ST.spokeAt < 20000))) return;
+  ST.spokeAt = now; ST.spoken = text; say(text);
+}
+function showMe() { ST.prompted = true; ST.shown = Math.min(3, ST.shown + 1); renderPractice(true); }
+function getHelp() {
+  ST.help = true; say('Okay. Your teacher is coming.');
+  api(`/api/live/${SESS.session}/help`, { method: 'POST' }).catch(() => {});
+  renderPractice(false);
+}
+// 练习中问问题：按一下说，再按一下停；看着当前画面回答一句
+function askCoach() {
+  const b = $('#askBtn');
+  listen(async q => {
+    if (!q) { b && (b.innerHTML = `${I.mic('#3F9E8F')} Ask`); return; }
+    ST.hint = `“${q}”`; paintLive();
+    const fd = new FormData(); fd.append('step', IDX); fd.append('q', q); const f = await grab(); if (f) fd.append('frame', f, 'f.jpg');
+    let r; try { r = await api(`/api/tasks/${T.id}/ask`, { body: fd }); } catch (e) { r = { say: "Let's ask your teacher." }; }
+    ST.hint = r.say; ST.spokeAt = Date.now(); ST.spoken = r.say; paintLive(); say(r.say);
+    if (b) b.innerHTML = `${I.mic('#3F9E8F')} Ask`;
+  }, st => { if (b) b.innerHTML = st === 'rec' ? '● Listening' : 'Thinking…'; });
+}
+let HOLD = null;
+function holdStart(e) { e.preventDefault(); const b = $('#hold'); b.classList.add('on'); HOLD = setTimeout(() => { HOLD = null; teacherOk(); }, 2000); }
+function holdEnd() { if (HOLD) { clearTimeout(HOLD); HOLD = null; } $('#hold')?.classList.remove('on'); }
+function teacherOk() { ST.verified = 'teacher'; finishStep(); }
+function quitPractice() { stopCam(); hush(); api(`/api/tasks/${T.id}/sessions/${SESS.session}/end`, { method: 'POST' }).catch(() => {}); startTask(T.id); }
+
+function grab() {
+  const v = $('#pv'); if (!v || !v.videoWidth) return null;
+  const k = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight)), c = document.createElement('canvas');
+  c.width = v.videoWidth * k; c.height = v.videoHeight * k; c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.75));
+}
+// 一直在拍：最近 3 帧（约 0.6 秒一帧）一起送去看，模型能看出“正在做什么”而不只是“做完没有”
+let FR = [];
+async function frameLoop() {
+  while (RUN) { if (STREAM) { const b = await grab(); if (b) { FR.push(b); if (FR.length > 3) FR.shift(); } } await wait(600); }
+}
+async function judgeLoop() {
+  FR = []; frameLoop();
+  while (RUN) {
+    if (!STREAM || ST.finishing || ST.stop || FR.length < 2) { await wait(400); continue; }
+    const fd = new FormData(); fd.append('step', IDX); fd.append('session', SESS.session); fd.append('view', CAM === 'user' ? 'front' : 'back');
+    fd.append('done', [...DONE].join(','));
+    FR.forEach((b, k) => fd.append('frames', b, `f${k}.jpg`));
+    let j; try { j = await api(`/api/tasks/${T.id}/judge`, { body: fd }); } catch (e) { await wait(1000); continue; }
+    if (!RUN || ST.finishing || ST.stop) continue;
+    if (j.confirmed) { teacherOk(); continue; }
+    // 灵活顺序：认出学生在做另一个"现在可以做"的步骤 → 跟着切过去（不念步骤，避免打断）
+    if (FLEX() && j.step != null && j.step !== IDX && !DONE.has(j.step) && availSteps().includes(j.step)) focusStep(j.step, false);
+    ST.status = j.status; ST.seeing = j.seeing || '';
+    if (j.status === 'done') {
+      ST.done++; ST.unclear = 0; ST.hint = '';
+      if (ST.done >= 2) { ST.verified = 'camera'; paintLive(); finishStep(); continue; }
+      ST.seeing = (j.seeing || '') + ' — hold still…'; paintLive(); continue;
+    }
+    ST.done = 0;
+    if (j.status === 'unsafe') {   // 危险：停下，叫老师，必须老师确认才能继续
+      ST.stop = true; ST.help = true; ST.hint = ''; renderPractice(false); say('Stop. Put it down. Wait for your teacher.');
+      api(`/api/live/${SESS.session}/help`, { method: 'POST' }).catch(() => {}); continue;
+    }
+    if (j.status === 'too_early') j.status = 'ahead';
+    if (j.status === 'wrong' || j.status === 'ahead') {
+      if (ST.lastBad !== j.status) ST.errors++;   // 同一次出错只记一次
+      ST.lastBad = j.status;
+      ST.hint = j.status === 'ahead' ? (FLEX() && j.hint ? `Wait. ${j.hint}` : `Wait. First: ${T.steps[IDX].text}`) : (j.hint || "Let's try this part again.");
+      if (ST.shown < 2) { ST.shown = 2; ST.prompted = true; renderPractice(false); }
+      paintLive(); coachSay(ST.hint, true); continue;
+    }
+    ST.lastBad = '';
+    if (j.status === 'unclear') { if (++ST.unclear >= 3) { ST.hint = j.hint || 'Move the phone so I can see your hands.'; coachSay(ST.hint); } }
+    else { ST.unclear = 0; ST.hint = j.hint || ''; if ((Date.now() - ST.t0) > 12000) coachSay(ST.hint); }
+    paintLive();
+    // 卡太久：自动多给一点提示（算作需要提示）
+    if ((Date.now() - ST.t0) / 1000 > 45 && ST.shown < 3 && !ST.autoUp) { ST.autoUp = true; ST.prompted = true; ST.shown++; renderPractice(true); }
+  }
+}
+// 没有镜头或在等老师时：看老师有没有在老师端点了“这步做完了”
+async function confirmLoop() {
+  while (RUN) {
+    await wait(2000);
+    if (!RUN || ST.finishing || (STREAM && !ST.stop)) continue;
+    try { const r = await api(`/api/live/${SESS.session}/confirmed`, { method: 'POST' }); if (r.confirmed === IDX) teacherOk(); } catch (e) {}
+  }
+}
+async function finishStep() {
+  if (ST.finishing) return; ST.finishing = true;
+  const result = ST.help ? 'help' : (ST.errors || ST.prompted) ? 'error' : 'clean';
+  const m = $('#mark'); if (m) m.classList.add('on');
+  say(['Nice.', 'Good.', 'Got it.'][IDX % 3], 1);
+  try { await api(`/api/tasks/${T.id}/sessions/${SESS.session}/step`, { json: { step: IDX, result, secs: (Date.now() - ST.t0) / 1000, errors: ST.errors, verified: ST.verified || 'camera' } }); } catch (e) {}
+  DONE.add(IDX);
+  await wait(1100);
+  let nxt = availSteps();
+  if (!nxt.length && DONE.size < T.steps.length) nxt = T.steps.map((_, i) => i).filter(i => !DONE.has(i));   // 依赖数据有问题时兜底
+  if (nxt.length) { FR = []; focusStep(nxt[0], true); return; }
+  RUN = false; stopCam();
+  try { await api(`/api/tasks/${T.id}/sessions/${SESS.session}/end`, { method: 'POST' }); } catch (e) {}
+  show('ldone');
+  $('#ldone').innerHTML = `<div class="yay"><div class="ring">${I.check('#fff', 72)}</div><h1>You did it!</h1><p class="sub L">${esc(T.title)}</p></div>
+    <div class="dock" style="flex-direction:column"><button class="cta" onclick="location.hash='#learn';route()">Finish</button></div>`;
+  say('You did it!');
+}
+
+/* ================= 老师端 ================= */
+let CSTU = null;   // 进度/周报当前看的学生
+const SW = `<div class="switch"><button onclick="location.hash='#learn'">Student</button><button class="on">Teacher</button></div>`;
+async function careHome() {
+  show('chome'); $('#chome').innerHTML = loading('');
+  await loadStudents();
+  let tasks = []; try { tasks = await api('/api/tasks'); } catch (e) {}
+  const review = tasks.filter(t => !t.approved), active = tasks.filter(t => t.approved);
+  const mini = (t, sid) => {
+    const ps = t.per_student[sid]; if (!ps) return '';
+    const indep = ps.levels.filter(l => l === 0).length;
+    return `<div class="row" style="gap:8px;margin-top:8px"><span style="width:72px;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nameOf(sid))}</span>
+      <div class="bar" style="flex:1"><i style="width:${Math.round(100 * indep / Math.max(1, t.n_steps))}%"></i></div>
+      <span class="sub" style="font-size:12px;width:64px;text-align:right">${ps.mastered ? 'Learned' : `${indep}/${t.n_steps} solo`}</span></div>`;
+  };
+  const row = t => `<button class="card" style="width:100%;text-align:left" onclick="location.hash='#care/${t.id}'">
+      <div class="row"><div style="flex:1;min-width:0"><div style="font-size:18px;font-weight:800">${esc(t.title)}</div>
+      <div class="sub" style="font-size:14px;margin-top:2px">${t.n_steps} steps · ${t.assigned.length ? t.assigned.length + ' student' + (t.assigned.length > 1 ? 's' : '') : 'not assigned'}</div></div>
+      ${t.approved ? '' : '<span class="tag warn">Check steps</span>'}</div>
+      ${t.assigned.map(sid => mini(t, sid)).join('')}</button>`;
+  $('#chome').innerHTML = `
+    <div class="top"><div><div class="sub">Teacher</div><h1>My class</h1></div>${SW}</div>
+    <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:16px">${STUDENTS.map(x => `<span class="pill">${esc(x.name)}</span>`).join('')}
+      <button class="pill" style="color:var(--p)" onclick="addStudent()">+ Student</button></div>
+    <div id="live"></div><div id="reqs"></div>
+    ${review.length ? `<h2 style="margin:22px 4px 10px">Waiting for you</h2><div class="stack">${review.map(row).join('')}</div>` : ''}
+    <h2 style="margin:22px 4px 10px">Skills</h2>
+    <div class="stack">${active.length ? active.map(row).join('') : '<p class="sub" style="margin:4px">Nothing yet. Make the first skill.</p>'}</div>
+    <div class="card" style="margin-top:22px"><h2 style="font-size:16px">Voice on this device</h2>
+      <p class="sub" style="font-size:13px;margin:4px 0 8px">Best: record your own voice for each step (Steps tab). Otherwise pick the most natural voice here.
+      On iPhone, download a better voice in Settings › Accessibility › Spoken Content › Voices › English › Ava or Zoe (Premium).</p>
+      <div class="row" style="gap:8px"><select id="vsel" style="flex:1;min-height:44px;border-radius:12px;padding:0 10px;font-size:15px" onchange="try{localStorage.setItem('voice',this.value)}catch(e){};say('Put the cup on the counter.')"></select>
+      <button class="tag" onclick="say('Put the cup on the counter.')">Test</button></div></div>
+    <div class="dock"><button class="cta" onclick="newTask()">+ New skill</button></div>`;
+  fillVoices(); liveLoop();
+  api('/api/requests').then(R => { const el = $('#reqs'); if (el && R.length) el.innerHTML = `<h2 style="margin:22px 4px 10px">Students asked for</h2><div class="stack">${R.map(r =>
+    `<div class="card row" style="gap:12px"><div style="flex:1"><b>${esc(r.name)}</b>: “${esc(r.said)}”</div><button class="tag" onclick="fromRequest(${r.i}, ${esc(JSON.stringify(r.said))})">Make it</button><button class="tag" onclick="api('/api/requests/${r.i}/done',{method:'POST'}).then(careHome)">Dismiss</button></div>`).join('')}</div>`; }).catch(() => {});
+}
+function fromRequest(i, said) { api(`/api/requests/${i}/done`, { method: 'POST' }).catch(() => {}); newTask(); NEW.goal = said; renderNew(); }
+function fillVoices() {
+  const el = $('#vsel'); if (!el) return;
+  const vs = voices(), cur = myVoice();
+  el.innerHTML = vs.length ? vs.slice(0, 12).map(v => `<option value="${esc(v.name)}" ${cur && v.name === cur.name ? 'selected' : ''}>${esc(v.name)}${/Premium|Enhanced|Natural|Neural/i.test(v.name) ? ' ★' : ''}</option>`).join('') : '<option>Default voice</option>';
+}
+try { speechSynthesis.onvoiceschanged = fillVoices; } catch (e) {}
+/* 老师端实时：谁在练、在第几步、镜头看到什么；有求助/危险/卡住就标红；老师可以远程确认这一步 */
+let LIVEON = false;
+async function liveLoop() {
+  if (LIVEON) return; LIVEON = true;
+  while (VIEW === 'chome') {
+    let L = []; try { L = await api('/api/live'); } catch (e) {}
+    const el = $('#live'); if (!el) break;
+    el.innerHTML = L.length ? `<h2 style="margin:22px 4px 10px">Practicing now</h2><div class="stack">${L.map(x => {
+      const alert = x.help ? 'Asked for help' : x.status === 'unsafe' ? 'Unsafe action — go now' : x.stuck_secs > 90 ? `Stuck ${Math.round(x.stuck_secs / 60)} min` : x.status === 'ahead' ? 'Trying to skip a step' : '';
+      return `<div class="card livecard"><img src="${api.url(`/api/live/${x.session}/frame.jpg?t=${Math.round(x.ts)}`)}" alt="">
+        <div style="min-width:0"><div style="font-weight:800">${esc(x.student)} · ${esc(x.title)}</div>
+        <div class="sub" style="font-size:14px">Step ${x.step + 1}/${x.total}: ${esc(x.text)}</div>
+        <div style="font-size:14px;margin-top:4px">${esc(x.seeing || '')}</div>
+        ${alert ? `<div class="alert">${esc(alert)}</div>` : ''}
+        <button class="tag" style="margin-top:6px" onclick="liveOk('${x.session}',${x.step},this)">Step ${x.step + 1} done ✓</button></div></div>`; }).join('')}</div>` : '';
+    await wait(2000);
+  }
+  LIVEON = false;
+}
+async function liveOk(sid, step, b) { b.textContent = 'Confirmed'; b.disabled = true; await api(`/api/live/${sid}/confirm`, { json: { step } }); }
+async function addStudent() { const n = prompt('Student first name'); if (n && n.trim()) { await api('/api/students', { json: { name: n.trim() } }); careHome(); } }
+
+/* ---------- 新建任务 ---------- */
+let NEW = { goal: '', photo: null, style: 'illustration', media: 'live' };
+function newTask() { NEW = { goal: '', photo: null, style: 'illustration', media: 'live' }; renderNew(); }
+function renderNew(msg) {
+  show('cnew');
+  $('#cnew').innerHTML = `
+    <div class="top"><button class="icon-btn" onclick="location.hash='#care';route()" aria-label="Back">${I.back}</button></div>
+    <h1 style="margin-top:8px">New skill</h1>
+    <p class="sub">Describe it in a few words. Add a photo of the real things your student will use. We draft the task analysis; you check it before any student sees it.</p>
+    <div class="stack" style="margin-top:16px">
+      <input class="field" placeholder="e.g. Fold a T-shirt for the drawer" value="${esc(NEW.goal)}" oninput="NEW.goal=this.value;document.getElementById('goBtn').disabled=!this.value.trim()">
+      <label class="upl">${NEW.photo ? `<img src="${URL.createObjectURL(NEW.photo)}" alt="">` : `${I.cam('#3F9E8F')} Photo of the things used (optional)`}
+        <input type="file" accept="image/*" capture="environment" hidden onchange="NEW.photo=this.files[0];renderNew()"></label>
+      <div class="card stack" style="gap:10px;padding:14px"><b style="font-size:15px">How students see the steps</b>
+        ${[['live', 'No pictures: live coach', 'Recommended. The coach talks the student through each step and watches with the camera. Add photos later if you want.'], ['photos', 'I\'ll take a photo of each step', 'Real photos of your real things: always accurate and age-appropriate.'], ['ai', 'Draft pictures with AI', 'Faster, but AI drawings can be wrong. You review every one.']].map(([k, l, d]) => `
+        <button style="text-align:left;padding:12px;border-radius:14px;border:1.5px solid ${NEW.media === k ? 'var(--p)' : 'var(--p4)'};background:${NEW.media === k ? 'var(--p5)' : '#fff'}" onclick="NEW.media='${k}';renderNew()"><b style="font-size:15px">${l}</b><div class="sub" style="font-size:13px;margin-top:2px">${d}</div></button>`).join('')}
+        ${NEW.media === 'ai' ? `<div class="row" style="gap:8px"><span class="sub" style="font-size:13px">Style</span>${[['illustration', 'Illustration'], ['realistic', 'Realistic']].map(([k, l]) => `<button class="pill" style="${NEW.style === k ? 'background:var(--p);color:#fff' : ''}" onclick="NEW.style='${k}';renderNew()">${l}</button>`).join('')}</div>` : ''}</div>
+      ${msg ? `<div class="gentle" style="font-size:16px">${esc(msg)}</div>` : ''}
+    </div>
+    <div class="dock"><button class="cta" id="goBtn" onclick="createTask()" ${NEW.goal.trim() ? '' : 'disabled'}>Draft the steps</button></div>`;
+}
+async function createTask() {
+  const fd = new FormData(); fd.append('goal', NEW.goal.trim()); fd.append('style', NEW.style); fd.append('media', NEW.media); if (NEW.photo) fd.append('photo', NEW.photo);
+  $('#cnew').innerHTML = loading('Reading the photo and drafting steps…', 'Spark reads the controls · Wonder writes the task analysis');
+  try { const t = await api('/api/tasks', { body: fd }); location.hash = '#care/' + t.id; }
+  catch (e) { renderNew('Something went wrong: ' + e.message); }
+}
+
+/* ---------- 单个任务：步骤 / 进度 / 周报 ---------- */
+let CT = null, CTAB = 'steps', POLL = null;
+async function openTask(id) {
+  show('ctask'); $('#ctask').innerHTML = loading('');
+  await loadStudents();
+  CT = await api(`/api/tasks/${id}`);
+  CSTU = (CT.assigned || []).includes(CSTU) ? CSTU : (CT.assigned || [])[0] || null;
+  CTAB = CT.approved ? 'data' : 'steps';
+  renderTask();
+}
+function renderTask() {
+  clearTimeout(POLL);
+  const t = CT, who = t.assigned || [];
+  const pick = CTAB !== 'steps' && who.length ? `<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">${who.map(sid =>
+    `<button class="pill" style="${sid === CSTU ? 'background:var(--p);color:#fff' : ''}" onclick="CSTU='${sid}';renderTask()">${esc(nameOf(sid))}</button>`).join('')}</div>` : '';
+  $('#ctask').innerHTML = `
+    <div class="top"><button class="icon-btn" onclick="location.hash='#care';route()" aria-label="Back">${I.back}</button>
+      ${t.approved ? '<span class="tag ok">Live for students</span>' : '<span class="tag warn">Not shown yet</span>'}</div>
+    <h1 style="margin-top:8px">${esc(t.title)}</h1>
+    <div class="tabs">${[['data', 'Data'], ['record', 'Record'], ['agents', 'Agents'], ['steps', 'Steps']].map(([k, l]) =>
+      `<button class="tab ${CTAB === k ? 'on' : ''}" onclick="CTAB='${k}';renderTask()">${l}</button>`).join('')}</div>
+    ${pick}<div id="tbody"></div>`;
+  if (CTAB !== 'steps' && !CSTU) { $('#tbody').innerHTML = `<div class="card"><b>No student assigned yet.</b><p class="sub">Assign this skill on the Steps tab.</p></div>`; return; }
+  ({ steps: renderSteps, data: renderData, record: renderRecord, agents: renderAgents })[CTAB]();
+}
+/* ---------- Agents：Coach 实时教 → Monitor 统计 → Tuner 提修改（老师批准）→ Analyst 写汇报 ---------- */
+const AG_C = { Coach: '#3F9E8F', Monitor: '#6B7875', Tuner: '#C7801F', Analyst: '#4F6FB0', Teacher: '#22302D' };
+const agChip = a => `<span class="agchip" style="background:${AG_C[a] || '#6B7875'}">${esc(a)}</span>`;
+async function renderAgents(busy) {
+  if (!busy) $('#tbody').innerHTML = loading('');
+  let A; try { A = await api(`/api/tasks/${CT.id}/agents?student=${CSTU}`); } catch (e) { $('#tbody').innerHTML = loading('Could not load', esc(e.message)); return; }
+  const R = A.report, H = A.health, md = d => new Date(d * 1000).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  $('#tbody').innerHTML = `
+    <div class="card agflow">${['Coach', 'Monitor', 'Tuner', 'Analyst'].map((a, k) => `${k ? '<i class="arr" style="font-style:normal">→</i>' : ''}${agChip(a)}`).join('')}
+      <p class="sub" style="font-size:13px;margin:8px 0 0;width:100%">Coach teaches live. Monitor counts what went wrong. Tuner proposes a fix, and nothing changes until you approve. Analyst writes your report. All numbers are computed by code.</p></div>
+
+    ${A.proposals.length ? `<h2 style="margin:18px 4px 10px">Fixes waiting for you</h2><div class="stack">${A.proposals.map(p => `
+      <div class="card">${agChip('Tuner')} <b style="margin-left:6px">Step ${p.step + 1}: ${esc(p.step_text)}</b>
+        <p style="margin:8px 0 4px;font-size:15px"><b>Problem:</b> ${esc(p.problem)}</p>
+        <p style="margin:0 0 8px;font-size:15px"><b>Fix:</b> ${esc(p.change)}</p>
+        ${(p.new_steps || []).map((n, k) => `<div class="agnew"><b>${p.new_steps.length > 1 ? `New step ${p.step + 1 + k}` : 'New version'}:</b> ${esc(n.text)}<div class="sub" style="font-size:13px">Camera checks: ${esc(n.done_state)}</div></div>`).join('')}
+        <div class="row" style="gap:8px;margin-top:10px"><button class="tag ok" onclick="propAct('${p.id}','apply')">${(p.new_steps || []).length ? 'Apply' : 'Got it'}</button><button class="tag" onclick="propAct('${p.id}','dismiss')">Dismiss</button></div></div>`).join('')}</div>` : ''}
+
+    <h2 style="margin:18px 4px 10px">Progress report · ${esc(nameOf(CSTU))}</h2>
+    <div class="card">${R ? `${agChip('Analyst')} <span class="sub" style="font-size:13px">${md(R.ts)}</span>
+        <p style="font-size:16px;line-height:1.5">${esc(R.summary)}</p>
+        ${(R.wins || []).length ? `<b>Going well</b><ul>${R.wins.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+        ${(R.concerns || []).length ? `<b>Needs support</b><ul>${R.concerns.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+        ${(R.next_week || []).length ? `<b>Next week</b><ul>${R.next_week.map(w => `<li>Step ${esc(w.step)}: ${esc(w.action)}</li>`).join('')}</ul>` : ''}
+        ${R.iep_line ? `<div class="agnew"><b>IEP line:</b> <span id="iepl">${esc(R.iep_line)}</span></div>` : ''}
+        <div class="row" style="gap:8px;margin-top:10px">${R.iep_line ? `<button class="tag" onclick="navigator.clipboard?.writeText($('#iepl').textContent);this.textContent='Copied ✓'">Copy IEP line</button>` : ''}
+        <button class="tag" onclick="runAnalyst(this)">Refresh report</button></div>`
+      : `<p class="sub" style="margin:0 0 10px">No report yet. It is written automatically after each practice.</p><button class="tag" onclick="runAnalyst(this)">Write report now</button>`}</div>
+
+    <h2 style="margin:18px 4px 10px">Camera check per step</h2>
+    <div class="card" style="padding:6px 14px">${H.steps.map(x => `<div class="aghl">
+      <div style="flex:1;min-width:0"><b style="font-size:14px">${x.step + 1}. ${esc(x.text)}</b>
+        <div class="sub" style="font-size:13px">${x.n ? `${x.n} checks · can't see ${x.unclear_pct}% · ${(x.avg_ms / 1000).toFixed(1)} s${x.ahead ? ` · ${x.ahead} skip tries` : ''}${x.unsafe ? ` · ${x.unsafe} unsafe` : ''}` : 'No camera data yet'}</div>
+        ${x.problems.length ? `<div style="color:#B83A2A;font-size:13px;font-weight:700">${esc(x.problems.join('; '))}</div>` : ''}</div>
+      ${x.n ? `<button class="tag" onclick="runTuner(${x.step}, this)">Ask Tuner</button>` : ''}</div>`).join('')}</div>
+
+    <h2 style="margin:18px 4px 10px">What the agents did</h2>
+    <div class="card" style="padding:6px 14px">${A.log.length ? A.log.map(l => `<div class="aglog">${agChip(l.agent)}<div><div style="font-size:14px">${esc(l.did)}</div><div class="sub" style="font-size:12px">${md(l.ts)}</div></div></div>`).join('') : '<p class="sub">Nothing yet. Agents start working after the first practice.</p>'}</div>`;
+}
+async function runAnalyst(b) { b.textContent = 'Analyst is writing…'; b.disabled = true; try { await api(`/api/tasks/${CT.id}/analyse?student=${CSTU}`, { method: 'POST' }); } catch (e) { alert(e.message); } renderAgents(true); }
+async function runTuner(i, b) { b.textContent = 'Tuner is thinking…'; b.disabled = true; try { await api(`/api/tasks/${CT.id}/tune?step=${i}`, { method: 'POST' }); } catch (e) { alert(e.message); } renderAgents(true); }
+async function propAct(pid, action) { CT = await api(`/api/tasks/${CT.id}/proposals/${pid}/${action}`, { method: 'POST' }); renderAgents(true); }
+function renderSteps() {
+  const t = CT, drawing = t.steps.some(s => s.card?.state === 'drawing'), unsafe = t.steps.some(s => s.card?.state === 'unsafe'),
+    missing = t.steps.filter(s => s.card?.state === 'needs_photo').length;
+  if (t.refuse) { $('#tbody').innerHTML = `<div class="card"><b>We can't make this one.</b><p class="sub">${esc(t.refuse)}</p></div>`; return; }
+  $('#tbody').innerHTML = `
+    ${t.seen?.missing ? `<div class="gentle" style="font-size:15px;text-align:left;margin-bottom:12px">Tip: ${esc(t.seen.missing)}</div>` : ''}
+    <div class="card" style="margin-bottom:12px"><h2 style="font-size:16px">Assign to</h2>
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">${STUDENTS.map(x => `<button class="pill" style="${(t.assigned || []).includes(x.id) ? 'background:var(--p);color:#fff' : ''}" onclick="toggleAssign('${x.id}')">${esc(x.name)}</button>`).join('') || '<span class="sub">Add students on the class page.</span>'}</div></div>
+    <div class="card" style="margin-bottom:12px"><h2 style="font-size:16px">Order</h2>
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">${[['flex', 'Any order that makes sense'], ['fixed', 'Same order every time']].map(([k, l]) =>
+        `<button class="pill" style="${(t.order || 'flex') === k ? 'background:var(--p);color:#fff' : ''}" onclick="patchTask({order:'${k}'})">${l}</button>`).join('')}</div>
+      <p class="sub" style="font-size:13px;margin:8px 0 0">${(t.order || 'flex') === 'flex' ? 'The coach recognises which step the student is doing. It only stops them when something must happen first (like boiling water before pouring).' : 'Best for students who need the same routine each time.'}</p></div>
+    ${missing ? `<div class="card row" style="margin-bottom:12px;gap:12px"><div style="flex:1"><b>${missing} step${missing > 1 ? 's need' : ' needs'} a photo</b><div class="sub" style="font-size:13px">Do the task once and take a photo after each step.</div></div>
+      <button class="tag" style="font-size:14px;padding:8px 14px" onclick="guidedPhotos()">Start</button></div>` : ''}
+    <div class="card" style="padding:6px 16px">${t.steps.map((s, i) => `
+      <div class="steprow">
+        <div class="th">${s.card?.state === 'drawing' ? '<div class="spin"></div>' : ['needs_photo', 'none'].includes(s.card?.state) ? `<label style="width:100%;height:100%;display:grid;place-items:center;cursor:pointer">${I.cam('#3F9E8F')}<input type="file" accept="image/*" capture="environment" hidden onchange="stepPhoto(${i}, this.files[0])"></label>` : s.card?.state === 'error' ? '!' : `<img src="${cardUrl(t, i)}" alt="">`}</div>
+        <div>
+          <input value="${esc(s.text)}" onchange="editStep(${i}, this.value)" aria-label="Step ${i + 1}">
+          <div class="meta">Cue: <b>${esc(s.cue || '')}</b> · Camera checks: ${esc(s.done_state || '')}${(t.order || 'flex') === 'flex' ? ` · ${(s.needs || []).length ? 'After step ' + s.needs.map(j => j + 1).join(', ') : 'Can be done any time'}` : ''}</div>
+          <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
+            ${s.safety ? `<span class="tag warn">${esc(s.safety)}</span>` : ''}
+            ${s.card?.record ? `<span class="tag warn">Safety step: picture shows objects only. Best to record a real demo.</span>` : ''}
+            ${s.card?.state === 'check' ? `<span class="tag warn" title="${esc(s.card.why || '')}">Check picture: ${esc(s.card.why || '')}</span>` : ''}
+            ${s.card?.state === 'unsafe' ? `<span class="tag warn">Unsafe picture: ${esc(s.card.why || '')}. Redraw or edit.</span>` : ''}
+            ${s.photo ? `<label class="tag" style="cursor:pointer">Retake photo<input type="file" accept="image/*" capture="environment" hidden onchange="stepPhoto(${i}, this.files[0])"></label>` : s.card?.state === 'none' ? `<label class="tag" style="cursor:pointer">Add photo (optional)<input type="file" accept="image/*" capture="environment" hidden onchange="stepPhoto(${i}, this.files[0])"></label>` : s.card?.state === 'needs_photo' ? `<label class="tag warn" style="cursor:pointer">Take photo<input type="file" accept="image/*" capture="environment" hidden onchange="stepPhoto(${i}, this.files[0])"></label>` : `<button class="tag" onclick="redrawCard(${i})">Redraw</button>`}
+            ${s.voice ? `<button class="tag" onclick="sayStep(CT, ${i})">▶ Your voice</button>` : ''}
+            <button class="tag" id="rec${i}" onclick="recVoice(${i})">${s.voice ? 'Re-record' : 'Record your voice'}</button>
+            ${(s.hazards || []).length ? `<span class="tag warn">Teacher nearby for this step</span>` : ''}
+            <button class="tag" onclick="removeStep(${i})">Remove</button>
+          </div>
+        </div>
+      </div>`).join('')}
+      <div style="padding:12px 0"><button class="tag" onclick="addStep()">+ Add step</button></div>
+    </div>
+    <p class="disc">Task analysis rules: one action per step, 8 words max, a visible end state the camera can check. Steps with heat, electricity or blades show objects only.</p>
+    <div class="dock">
+      <button class="cta soft" style="flex:1" onclick="printCards()" ${drawing ? 'disabled' : ''}>Print cards</button>
+      ${t.approved ? `<button class="cta" style="flex:1.4" onclick="location.hash='#learn'">Student view</button>`
+      : `<button class="cta" style="flex:1.4" onclick="approve()" ${drawing || unsafe || missing ? 'disabled' : ''}>${drawing ? 'Drawing cards…' : unsafe ? 'Fix unsafe picture' : missing ? `${missing} photo${missing > 1 ? 's' : ''} to go` : 'Approve'}</button>`}</div>
+    ${missing ? `<p class="disc"><a href="#" onclick="drawMissing();return false" style="color:var(--sub)">No time? Draft the missing pictures with AI</a></p>` : ''}`;
+  if (drawing) POLL = setTimeout(async () => { CT = await api(`/api/tasks/${t.id}`); if (VIEW === 'ctask' && CTAB === 'steps') renderTask(); }, 4000);
+}
+/* 老师录这一步的口令：点一下开始，再点一下停（最长 8 秒） */
+let VREC = null;
+async function recVoice(i) {
+  const b = $('#rec' + i);
+  if (VREC) { VREC.stop(); return; }
+  let st; try { st = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { alert('Microphone is blocked.'); return; }
+  const type = ['audio/mp4', 'audio/webm'].find(t => window.MediaRecorder?.isTypeSupported?.(t)) || '';
+  const r = VREC = new MediaRecorder(st, type ? { mimeType: type } : {}), parts = [];
+  r.ondataavailable = e => parts.push(e.data);
+  r.onstop = async () => {
+    st.getTracks().forEach(t => t.stop()); VREC = null; b.textContent = 'Saving…';
+    const blob = new Blob(parts, { type: r.mimeType || 'audio/webm' }), fd = new FormData();
+    fd.append('audio', blob, /mp4/.test(blob.type) ? 'v.m4a' : 'v.webm');
+    try { await api(`/api/tasks/${CT.id}/steps/${i}/voice`, { body: fd }); CT = await api(`/api/tasks/${CT.id}`); renderTask(); } catch (e) { b.textContent = 'Failed, try again'; }
+  };
+  r.start(); b.textContent = '● Recording… tap to stop'; b.style.color = '#B83A2A';
+  setTimeout(() => { if (VREC === r) r.stop(); }, 8000);
+}
+async function stepPhoto(i, file) {
+  if (!file) return;
+  const fd = new FormData(); fd.append('photo', file);
+  await api(`/api/tasks/${CT.id}/steps/${i}/photo`, { body: fd });
+  CT = await api(`/api/tasks/${CT.id}`); if (VIEW === 'ctask') renderTask();
+}
+async function drawMissing() { await api(`/api/tasks/${CT.id}/draw_missing`, { method: 'POST' }); CT = await api(`/api/tasks/${CT.id}`); renderTask(); }
+
+/* ---------- 引导拍照：老师做一遍，每做完一步拍一张 ---------- */
+let GI = 0;
+function guidedPhotos(i) {
+  GI = i ?? CT.steps.findIndex(s => s.card?.state === 'needs_photo'); if (GI < 0) GI = 0;
+  const s = CT.steps[GI], n = CT.steps.length;
+  show('cnew');
+  $('#cnew').innerHTML = `
+    <div class="top"><button class="icon-btn" onclick="show('ctask');renderTask()" aria-label="Back">${I.back}</button>${dots(n, GI)}<span style="width:44px"></span></div>
+    <div class="sub" style="text-align:center;margin-top:18px">Step ${GI + 1} of ${n}: do it, then take a photo of the result</div>
+    <div class="steptext" style="margin-top:8px">${esc(s.text)}</div>
+    <div class="stepimg" style="margin-top:12px;display:grid;place-items:center">${s.photo ? `<img src="${cardUrl(CT, GI)}" alt="">` : `<div class="sub" style="padding:24px;text-align:center">Camera will check: ${esc(s.done_state || '')}</div>`}</div>
+    <div class="dock" style="flex-direction:column">
+      <label class="cta" style="cursor:pointer">${I.cam('#fff')} ${s.photo ? 'Retake' : 'Take photo'}<input type="file" accept="image/*" capture="environment" hidden onchange="guidedShot(this.files[0])"></label>
+      ${s.photo ? `<button class="cta soft" onclick="${GI < n - 1 ? `guidedPhotos(${GI + 1})` : `show('ctask');renderTask()`}">${GI < n - 1 ? 'Next step' : 'Done'}</button>` : `<button class="cta soft" onclick="${GI < n - 1 ? `guidedPhotos(${GI + 1})` : `show('ctask');renderTask()`}">Skip</button>`}</div>`;
+}
+async function guidedShot(file) {
+  if (!file) return;
+  $('#cnew .stepimg').innerHTML = '<div class="spin"></div>';
+  const fd = new FormData(); fd.append('photo', file);
+  await api(`/api/tasks/${CT.id}/steps/${GI}/photo`, { body: fd });
+  CT = await api(`/api/tasks/${CT.id}`);
+  if (GI < CT.steps.length - 1) guidedPhotos(GI + 1); else { show('ctask'); renderTask(); }
+}
+
+async function patchTask(body) { CT = await api(`/api/tasks/${CT.id}`, { method: 'PATCH', json: body }); renderTask(); }
+function toggleAssign(sid) { const a = new Set(CT.assigned || []); a.has(sid) ? a.delete(sid) : a.add(sid); patchTask({ assigned: [...a] }); }
+function editStep(i, text) { const st = CT.steps.map(s => ({ ...s })); st[i].text = text.trim(); patchTask({ steps: st }); }
+function removeStep(i) { patchTask({ steps: CT.steps.filter((_, j) => j !== i) }); }
+function addStep() { const text = prompt('New step (one action, 8 words max)'); if (text) patchTask({ steps: [...CT.steps, { text, cue: text.split(' ')[0] + '.', objects: [], chunk: 9 }] }); }
+async function redrawCard(i) { await api(`/api/tasks/${CT.id}/steps/${i}/redraw`, { method: 'POST' }); CT = await api(`/api/tasks/${CT.id}`); renderTask(); }
+function approve() { patchTask({ approved: true }); }
+
+/* ---------- 打印纸质任务卡（老师现在最常用的就是任务卡和工作盒） ---------- */
+function printCards() {
+  const t = CT, w = window.open('', '_blank');
+  const cards = t.steps.map((s, i) => `<div class="c"><div class="n">${i + 1}</div><img src="${location.origin}${cardUrl(t, i)}"><div class="t">${esc(s.text)}</div>${s.safety ? `<div class="s">⚠ ${esc(s.safety)}</div>` : ''}</div>`).join('');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(t.title)} · task cards</title><style>
+    @page { size: letter; margin: 12mm; } body { font-family: -apple-system, system-ui, sans-serif; color:#22302D; margin:0; }
+    h1 { font-size:22px; margin:0 0 10px; } .g { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .c { border:2px solid #BFE3DC; border-radius:14px; padding:10px; break-inside:avoid; position:relative; }
+    .c img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; display:block; }
+    .n { position:absolute; top:16px; left:16px; width:40px; height:40px; border-radius:50%; background:#3F9E8F; color:#fff; font-size:22px; font-weight:800; display:grid; place-items:center; }
+    .t { font-size:22px; font-weight:800; text-align:center; margin-top:8px; } .s { font-size:14px; color:#B83A2A; text-align:center; font-weight:700; }
+  </style></head><body><h1>${esc(t.title)}</h1><div class="g">${cards}</div>
+  <script>Promise.all([...document.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))).then(() => setTimeout(() => print(), 300));<\/script></body></html>`);
+  w.document.close();
+}
+
+/* ---------- 数据表（标准任务分析数据表：步骤 × 日期，每格一个提示代码） ---------- */
+const CODE_C = { I: ['#3F9E8F', '#fff'], IS: ['#7CC0B5', '#fff'], VB: ['#BFE3DC', '#22302D'], G: ['#E2F2EE', '#22302D'],
+  M: ['#F1F8F6', '#22302D'], P: ['#fff', '#22302D'], H: ['#F0614F', '#fff'] };
+let PROG = null, EDIT = null;
+async function renderData() {
+  $('#tbody').innerHTML = loading('');
+  const p = PROG = await api(`/api/tasks/${CT.id}/progress?student=${CSTU}`);
+  const NAME = nameOf(CSTU), n = p.n_steps, S = p.sessions.length;
+  if (!S) { $('#tbody').innerHTML = `<div class="card"><b>No data yet.</b><p class="sub">Record a lesson on the Record tab, or let ${esc(NAME)} practice on the student view. Every step is saved here as a standard prompt code.</p></div>
+    <div class="dock"><button class="cta" onclick="CTAB='record';renderTask()">Record a lesson</button></div>`; return; }
+  const md = d => new Date(d * 1000).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+  const cell = (c, i, j) => { const [bg, fg] = CODE_C[c.code] || ['#fff', '#6B7875'];
+    return `<td><button class="cell" style="background:${bg};color:${fg}" onclick="editCell(${j},${i})" aria-label="Step ${i + 1}, session ${j + 1}">${c.code || '–'}${c.edited ? '<i class="ed"></i>' : ''}${c.code && !c.edited ? `<span class="vm">${c.v === 'camera' ? '◉' : c.v === 'teacher' ? 'T' : c.v === 'self' ? '?' : ''}</span>` : ''}${(c.flags || []).length ? '<i class="fl"></i>' : ''}</button></td>`; };
+  $('#tbody').innerHTML = `
+    <div class="kpi"><div><b>${p.pct[0]}%</b><span>baseline independent</span></div><div><b>${p.pct.at(-1)}%</b><span>latest (${S} session${S > 1 ? 's' : ''})</span></div>
+      <div><b>${p.step_mastered.filter(Boolean).length}/${n}</b><span>steps mastered (3× I)</span></div></div>
+    <div class="card" style="margin-top:12px;padding:12px 0 12px 12px"><div class="sheet"><table>
+      <thead><tr><th class="st">Step</th>${p.sessions.map(s => `<th>${md(s.date)}<span>${s.setting === 'home' ? 'home' : s.source === 'teacher' ? 'tchr' : 'app'}</span></th>`).join('')}</tr></thead>
+      <tbody>${p.steps.map((txt, i) => `<tr><th class="st">${p.step_mastered[i] ? '✓ ' : ''}${i + 1}. ${esc(txt)}</th>${p.grid[i].map((c, j) => cell(c, i, j)).join('')}</tr>`).join('')}
+      <tr class="pct"><th class="st">% independent</th>${p.pct.map(x => `<td>${x}%</td>`).join('')}</tr></tbody></table></div>
+      <div class="legend" style="padding-right:12px"><span><b>◉</b> camera saw it done</span><span><b>T</b> teacher confirmed</span><span><b>?</b> not confirmed</span><span><i style="background:#F0614F;border-radius:50%"></i> skip / unsafe flag</span>${Object.entries(p.code_names).map(([k, v]) => `<span><i style="background:${CODE_C[k][0]};border:1px solid #BFE3DC"></i><b>${k}</b> ${esc(v)}</span>`).join('')}</div></div>
+    <div class="card" style="margin-top:12px"><h2 style="font-size:16px">IEP progress note</h2>
+      <p class="sub" style="font-size:13px;margin:4px 0 8px">Calculated from the data above. Nothing is made up.</p>
+      <p id="iep" style="font-size:15px;line-height:1.55;margin:0"></p>
+      <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="tag" onclick="navigator.clipboard?.writeText(document.getElementById('iep').textContent);this.textContent='Copied ✓'">Copy note</button>
+        <a class="tag" href="/api/tasks/${CT.id}/datasheet.csv?student=${CSTU}${K ? '&k=' + encodeURIComponent(K) : ''}">Download CSV</a>
+        <button class="tag" onclick="printSheet()">Print data sheet</button></div></div>
+    <div class="card" style="margin-top:12px"><h2 style="font-size:16px">Sessions</h2>
+      <p class="sub" style="font-size:13px;margin:4px 0 6px">One line per session, ready to enter in SpedTrack or your IEP system.</p>
+      ${p.sessions.map((s, j) => { const line = `${new Date(s.date * 1000).toLocaleDateString('en-US')} · ${Math.round(p.pct[j] * n / 100)}/${n} independent (${p.pct[j]}%)${s.note ? ' · ' + s.note : ''}`;
+        return `<div class="row" style="align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid var(--line)"><div style="flex:1;font-size:14px;line-height:1.45">${esc(line)}</div>
+        <button class="tag" onclick='navigator.clipboard?.writeText(${JSON.stringify(line).replace(/'/g, "&#39;")});this.textContent="Copied"'>Copy</button></div>`; }).reverse().join('')}
+      <a class="tag" style="margin-top:8px" href="/api/tasks/${CT.id}/sessions.csv?student=${CSTU}${K ? '&k=' + encodeURIComponent(K) : ''}">Download sessions CSV</a></div>
+    <p class="disc">Tap any cell to correct it. Your edits always win over automatic data.</p>
+    <div id="picker"></div>
+    <div class="dock"><button class="cta" onclick="CTAB='record';renderTask()">Record a lesson</button></div>`;
+  api(`/api/tasks/${CT.id}/iep_note?student=${CSTU}`).then(r => { const e = $('#iep'); if (e) e.textContent = r.text; }).catch(() => {});
+}
+function editCell(j, i) {
+  EDIT = { sid: PROG.sessions[j].id, step: i };
+  const c = PROG.grid[i][j];
+  const how = { camera: 'Camera saw this step done.', teacher: 'Teacher confirmed this step.', self: 'Not confirmed (student tapped done).' }[c.v] || '';
+  const fl = (c.flags || []).map(f => ({ unsafe: 'Unsafe action seen', ahead: 'Tried to skip this step', wrong: 'Started the wrong way' }[f] || f)).join(' · ');
+  $('#picker').innerHTML = `<div class="sheetpick"><div class="row" style="justify-content:space-between"><b>Step ${i + 1}: ${esc(PROG.steps[i])}</b><button class="tag" onclick="$('#picker').innerHTML=''">Close</button></div>
+    ${how || fl ? `<p class="sub" style="font-size:14px;margin:6px 0">${esc(how)}${fl ? ` <b style="color:#B83A2A">${esc(fl)}</b>` : ''}</p>` : ''}
+    ${c.ev ? `<img src="${api.url(`/api/tasks/${CT.id}/evidence/${c.ev}`)}" alt="Camera still" style="width:100%;max-width:320px;border-radius:14px;margin:4px 0 10px">` : ''}
+    <div class="codes">${PROG.codes.map(c => `<button onclick="saveCell('${c}')" style="background:${CODE_C[c][0]};color:${CODE_C[c][1]}"><b>${c}</b><span>${esc(PROG.code_names[c])}</span></button>`).join('')}
+    <button onclick="saveCell(null)"><b>–</b><span>Not attempted</span></button></div></div>`;
+}
+async function saveCell(code) { await api(`/api/tasks/${CT.id}/sessions/${EDIT.sid}/code`, { json: { step: EDIT.step, code } }); renderData(); }
+function printSheet() {
+  const p = PROG, w = window.open('', '_blank'), md = d => new Date(d * 1000).toLocaleDateString('en-US');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Data sheet</title><style>
+    @page{size:letter landscape;margin:12mm} body{font-family:-apple-system,system-ui,sans-serif;color:#22302D}
+    table{border-collapse:collapse;width:100%} th,td{border:1px solid #BFE3DC;padding:6px 8px;font-size:13px;text-align:center} th.st{text-align:left;width:38%}
+    h1{font-size:18px;margin:0 0 4px} p{margin:0 0 10px;font-size:12px;color:#6B7875}</style></head><body>
+    <h1>Task analysis data sheet: ${esc(CT.title)}</h1><p>Student: ${esc(nameOf(CSTU))} · Codes: ${Object.entries(p.code_names).map(([k, v]) => k + ' = ' + v).join('; ')}</p>
+    <table><tr><th class="st">Step</th>${p.sessions.map(s => `<th>${md(s.date)}</th>`).join('')}${'<th>&nbsp;&nbsp;&nbsp;&nbsp;</th>'.repeat(4)}</tr>
+    ${p.steps.map((t, i) => `<tr><th class="st">${i + 1}. ${esc(t)}</th>${p.grid[i].map(c => `<td>${c.code || ''}</td>`).join('')}${'<td></td>'.repeat(4)}</tr>`).join('')}
+    <tr><th class="st">% independent</th>${p.pct.map(x => `<td>${x}%</td>`).join('')}${'<td></td>'.repeat(4)}</tr></table>
+    <script>setTimeout(() => print(), 300)<\/script></body></html>`);
+  w.document.close();
+}
+
+/* ---------- 录入：老师上课时每一步点一个代码 ---------- */
+let REC_CODES = [], REC_SET = 'school', REC_NOTE = '';
+function renderRecord() {
+  if (REC_CODES.length !== CT.steps.length) REC_CODES = CT.steps.map(() => null);
+  const done = REC_CODES.filter(Boolean).length;
+  $('#tbody').innerHTML = `
+    <div class="row" style="gap:8px;margin-bottom:12px"><span class="sub" style="font-size:14px">Setting</span>
+      ${['school', 'home'].map(x => `<button class="pill" style="${REC_SET === x ? 'background:var(--p);color:#fff' : ''}" onclick="REC_SET='${x}';renderRecord()">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div>
+    <div class="card" style="padding:4px 14px">${CT.steps.map((s, i) => `
+      <div class="recrow"><div class="row" style="gap:10px"><div class="th" style="width:44px;height:44px;border-radius:10px;overflow:hidden;flex:none"><img src="${cardUrl(CT, i)}" alt="" style="width:100%;height:100%;object-fit:cover"></div>
+        <div style="font-size:15px;font-weight:700">${i + 1}. ${esc(s.text)}</div></div>
+        <div class="codes1">${['I', 'IS', 'VB', 'G', 'M', 'P'].map(c => `<button class="${REC_CODES[i] === c ? 'on' : ''}" onclick="REC_CODES[${i}]=REC_CODES[${i}]==='${c}'?null:'${c}';renderRecord()">${c}</button>`).join('')}</div></div>`).join('')}</div>
+    <textarea class="field" style="margin-top:12px;min-height:72px;font-size:15px" placeholder="Note (optional): what happened today?" oninput="REC_NOTE=this.value">${esc(REC_NOTE)}</textarea>
+    <p class="disc">I independent · IS with visual/video support · VB verbal · G gestural · M model · P physical</p>
+    <div class="dock"><button class="cta" onclick="saveRecord()" ${done ? '' : 'disabled'}>Save ${done}/${CT.steps.length} steps for ${esc(nameOf(CSTU))}</button></div>`;
+}
+async function saveRecord() {
+  await api(`/api/tasks/${CT.id}/manual`, { json: { student: CSTU, codes: REC_CODES, setting: REC_SET, note: REC_NOTE } });
+  REC_CODES = []; REC_NOTE = ''; CTAB = 'data'; renderTask();
+}
+
+speechSynthesis.getVoices();
+route();
+</script>
+</body>
+</html>

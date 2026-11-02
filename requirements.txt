@@ -1,0 +1,8 @@
+openai>=1.40
+python-dotenv>=1.0
+opencv-python>=4.9
+requests>=2.31
+imageio-ffmpeg>=0.5
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9

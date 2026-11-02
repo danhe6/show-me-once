@@ -1,0 +1,233 @@
+{
+ "id": "ac801abc93",
+ "goal": "make a cup of tea with an electric kettle",
+ "title": "Make a cup of tea",
+ "created": 1793114635.2006452,
+ "approved": true,
+ "seen": {
+  "object": null,
+  "controls": [],
+  "parts": [],
+  "printed_instructions": null,
+  "missing": null
+ },
+ "refuse": null,
+ "problems": [],
+ "steps": [
+  {
+   "text": "Put tea bag in mug.",
+   "cue": "Bag.",
+   "done_state": "a tea bag sits in a mug",
+   "objects": [
+    "mug",
+    "tea bag"
+   ],
+   "safety": null,
+   "chunk": 1,
+   "card": {
+    "state": "ready",
+    "why": "Clearly shows tea bag moving down into mug.",
+    "v": 1793114694
+   },
+   "hazards": [],
+   "needs": []
+  },
+  {
+   "text": "Fill kettle with water at sink.",
+   "cue": "Water.",
+   "done_state": "water is inside the kettle",
+   "objects": [
+    "kettle"
+   ],
+   "safety": "Keep cord and plug dry.",
+   "chunk": 1,
+   "card": {
+    "state": "check",
+    "why": "Lid disappears between frames and filling kettle while on electric base is unsafe.",
+    "v": 1793114730
+   },
+   "hazards": [
+    "heat",
+    "electric"
+   ],
+   "needs": []
+  },
+  {
+   "text": "Put kettle on its base.",
+   "cue": "Base.",
+   "done_state": "kettle sits on its base",
+   "objects": [
+    "kettle",
+    "kettle base"
+   ],
+   "safety": null,
+   "chunk": 1,
+   "card": {
+    "state": "ready",
+    "why": "Both frames clearly show kettle lowering onto its base with down arrow.",
+    "v": 1793114693
+   },
+   "hazards": [
+    "heat"
+   ],
+   "needs": [
+    1
+   ]
+  },
+  {
+   "text": "Press kettle switch down.",
+   "cue": "Switch.",
+   "done_state": "kettle switch is down",
+   "objects": [
+    "kettle",
+    "kettle switch"
+   ],
+   "safety": null,
+   "chunk": 2,
+   "card": {
+    "state": "ready",
+    "why": "Hand presses the kettle switch down with clear downward arrow.",
+    "v": 1793114697
+   },
+   "hazards": [
+    "heat"
+   ],
+   "needs": [
+    1,
+    2
+   ]
+  },
+  {
+   "text": "Wait until kettle switch pops up.",
+   "cue": "Wait.",
+   "done_state": "kettle switch is up",
+   "objects": [
+    "kettle",
+    "kettle switch"
+   ],
+   "safety": "Steam is hot. Do not touch.",
+   "chunk": 2,
+   "card": {
+    "state": "check",
+    "why": "Shows pressing the switch and lid popping up instead of waiting for switch to pop up.",
+    "v": 1793114752
+   },
+   "hazards": [
+    "heat"
+   ],
+   "needs": [
+    1,
+    2,
+    3
+   ]
+  },
+  {
+   "text": "Pour hot water into mug.",
+   "cue": "Pour.",
+   "done_state": "mug is full of water",
+   "objects": [
+    "kettle",
+    "mug"
+   ],
+   "safety": "Hot water can burn skin.",
+   "chunk": 2,
+   "card": {
+    "state": "ready",
+    "why": "Kettle pours into mug with both hands clear and items consistent.",
+    "v": 1793115266
+   },
+   "hazards": [
+    "heat"
+   ],
+   "needs": [
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "text": "Leave mug to sit three minutes.",
+   "cue": "Timer.",
+   "done_state": "tea in mug is dark",
+   "objects": [
+    "mug"
+   ],
+   "safety": null,
+   "chunk": 3,
+   "card": {
+    "state": "check",
+    "why": "Hand still holds mug instead of leaving it, and top hand disappears between frames.",
+    "v": 1793114766
+   },
+   "hazards": [],
+   "needs": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ]
+  },
+  {
+   "text": "Lift tea bag out with spoon.",
+   "cue": "Spoon.",
+   "done_state": "tea bag is on spoon above mug",
+   "objects": [
+    "tea bag",
+    "spoon",
+    "mug"
+   ],
+   "safety": "Hot tea can burn skin.",
+   "chunk": 3,
+   "card": {
+    "state": "check",
+    "why": "Both frames show the bag already lifted so no before-to-after lift is shown.",
+    "v": 1793114806
+   },
+   "hazards": [
+    "heat"
+   ],
+   "needs": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ]
+  }
+ ],
+ "levels": [
+  3,
+  3,
+  3,
+  3,
+  3,
+  3,
+  3,
+  3
+ ],
+ "history": [
+  [],
+  [],
+  [],
+  [],
+  [],
+  [],
+  [],
+  []
+ ],
+ "sessions": [],
+ "has_photo": false,
+ "assigned": [
+  "672fd5",
+  "00e3fa"
+ ],
+ "learners": {},
+ "agent_log": [],
+ "proposals": [],
+ "order": "flex"
+}

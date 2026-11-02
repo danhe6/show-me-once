@@ -1,0 +1,11 @@
+.env
+__pycache__/
+.venv/
+jobs/
+data/coach/watch_log.jsonl
+data/coach/requests.json
+data/coach/tasks/*/evidence/
+data/coach/tasks/_archived_*/
+serve.log
+*.tmp
+_to_delete/
