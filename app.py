@@ -22,6 +22,9 @@ sys.path.insert(0, str(ROOT / "src"))
 import coach  # noqa: E402
 import safety  # noqa: E402
 import agents  # noqa: E402
+import tts  # noqa: E402
+
+tts.warmup()   # 启动时就把语音模型加载好
 from spark import _client, _parse  # noqa: E402
 
 app = FastAPI(title="Step coach")
@@ -141,6 +144,21 @@ def add_student(req: NewStudent):
 
 
 # ---------- 任务 ----------
+@app.post("/api/tasks/clarify")
+async def clarify_task(goal: str = Form(...), photo: UploadFile | None = File(None)):
+    """目标太宽（"use the computer"）时先问一个问题，给几个具体选项；够具体就直接返回 specific=true。"""
+    seen = None
+    if photo is not None:
+        try:
+            seen = coach.see(goal, [_small_jpeg(await photo.read())])
+        except Exception:  # noqa: BLE001
+            seen = None
+    try:
+        return coach.clarify(goal, seen)
+    except Exception:  # noqa: BLE001
+        return {"specific": True}
+
+
 @app.post("/api/tasks")
 async def create_task(goal: str = Form(...), photo: UploadFile | None = File(None), style: str = Form("illustration"),
                       media: str = Form("live")):
@@ -191,9 +209,11 @@ def get_task(tid: str):
     for st in t["steps"]:   # 旧任务没有 hazards 字段：按统一安全规则现算
         st.setdefault("hazards", safety.hazards(st))
     t.setdefault("order", "flex")
-    if t["steps"] and any(st.get("needs") is None for st in t["steps"]):   # 旧任务：推断步骤之间真正的先后依赖
-        _set_order(t)
+    if t["steps"] and any(st.get("needs") is None for st in t["steps"]):   # 旧任务：先按固定顺序，后台推断真正的依赖（约 1 分钟）
+        for i, st in enumerate(t["steps"]):
+            st["needs"] = [i - 1] if i else []
         save(t)
+        _reorder_bg(tid)
     return t
 
 
@@ -267,6 +287,10 @@ def edit_task(tid: str, req: TaskEdit):
         t["order"] = req.order
     if req.approved is not None:
         t["approved"] = req.approved
+        if req.approved and not (req.assigned or t.get("assigned")):   # 批准时没选人：默认给全班
+            t["assigned"] = [x["id"] for x in students()]
+            for sid in t["assigned"]:
+                _learner(t, sid)
     if req.assigned is not None:
         t["assigned"] = req.assigned
         for sid in req.assigned:
@@ -401,6 +425,24 @@ def archive(tid: str):
 # ---------- 练习 ----------
 class StartReq(BaseModel):
     student: str
+    lang: str = "en"
+
+
+def _texts(t: dict, lang: str) -> list[dict] | None:
+    """学生端用的步骤文字（中文等）。翻译一次缓存在 task.json 里；步骤改了就重翻。"""
+    if lang == "en":
+        return None
+    key = t["title"] + "|" + "|".join(x["text"] for x in t["steps"])
+    cache = (t.get("i18n") or {}).get(lang)
+    if cache and cache.get("key") == key:
+        return cache
+    try:
+        out = coach.translate_steps(t["steps"], lang, t["title"])
+    except Exception:  # noqa: BLE001
+        return None
+    out["key"] = key
+    t.setdefault("i18n", {})[lang] = out
+    return out
 
 
 @app.post("/api/tasks/{tid}/sessions")
@@ -408,11 +450,13 @@ def start_session(tid: str, req: StartReq):
     t = load(tid)
     L = _learner(t, req.student)
     s = {"id": uuid.uuid4().hex[:8], "student": req.student, "start": time.time(), "end": None,
-         "levels": list(L["levels"]), "results": {}}
+         "levels": list(L["levels"]), "results": {}, "lang": req.lang}
     t["sessions"].append(s)
+    tr = _texts(t, req.lang)
     save(t)
     _live(s["id"]).update(student=req.student)
-    return {"session": s["id"], "levels": s["levels"], "level_names": coach.LEVELS}
+    return {"session": s["id"], "levels": s["levels"], "level_names": coach.LEVELS,
+            "texts": tr["steps"] if tr else None, "title_l": tr["title"] if tr else None}
 
 
 # ---------- 练习时：镜头一边看一边提示；老师实时看到 ----------
@@ -428,7 +472,7 @@ def _live(sid: str) -> dict:
 
 @app.post("/api/tasks/{tid}/judge")
 async def judge(tid: str, step: int = Form(...), session: str = Form(""), view: str = Form("back"), done: str = Form(""),
-                frames: list[UploadFile] = File(...)):
+                lang: str = Form("en"), frames: list[UploadFile] = File(...)):
     t = load(tid)
     imgs = [await f.read() for f in frames][-3:]
     st = t["steps"][step]
@@ -439,12 +483,12 @@ async def judge(tid: str, step: int = Form(...), session: str = Form(""), view: 
     try:
         if t.get("order", "flex") == "flex":
             done_set = {int(x) for x in done.split(",") if x.strip().isdigit()}
-            res = coach.watch_flex(imgs, t["steps"], done_set, t["title"], step, ref, view)
+            res = coach.watch_flex(imgs, t["steps"], done_set, t["title"], step, ref, view, lang)
             if res.get("step") is not None:
                 step = res["step"]
                 st = t["steps"][step]
         else:
-            res = coach.watch(imgs, t["steps"], step, ref, view)
+            res = coach.watch(imgs, t["steps"], step, ref, view, lang)
     except Exception as e:  # 模型偶尔超时：前端当作没看清，继续下一轮
         res = {"status": "unclear", "seeing": None, "hint": None, "error": str(e)[:200]}
     res["ms"] = int((time.time() - t0) * 1000)
@@ -470,7 +514,7 @@ class StepResult(BaseModel):
     result: str          # clean | error | help
     secs: float = 0
     errors: int = 0
-    verified: str = "camera"   # camera = 镜头确认 | teacher = 老师确认 | self = 旧版：学生自己点（不算独立）
+    verified: str = "camera"   # camera = 镜头确认 | teacher = 老师确认 | agreed = 学生说做完+镜头没看出矛盾 | self = 旧版（不算独立）
 
 
 @app.post("/api/tasks/{tid}/sessions/{sid}/step")
@@ -509,13 +553,14 @@ def evidence(tid: str, name: str):
 class IntentReq(BaseModel):
     student: str
     said: str
+    lang: str = "en"
 
 
 @app.post("/api/intent")
 def intent(req: IntentReq):
     """学生说"今天想做什么" → 只在老师批准、分给这个学生的任务里找。找不到就记下来交给老师。"""
     tasks = [t for t in list_tasks(req.student) if t.get("approved")]
-    res = coach.intent(req.said, tasks) if tasks else {"task_id": None, "say": "Let's ask your teacher to add that."}
+    res = coach.intent(req.said, tasks, req.lang) if tasks else {"task_id": None, "say": "Let's ask your teacher to add that." if req.lang == "en" else "我们请老师把这个加进来吧。"}
     if not res.get("task_id"):
         p = ROOT / "data/coach/requests.json"
         reqs = json.loads(p.read_text()) if p.exists() else []
@@ -542,23 +587,24 @@ def request_done(i: int):
 
 
 @app.post("/api/tasks/{tid}/ready")
-async def ready(tid: str, frames: list[UploadFile] = File(...)):
+async def ready(tid: str, lang: str = Form("en"), frames: list[UploadFile] = File(...)):
     """开始前看一眼桌上：要用的东西齐了没有。"""
     t = load(tid)
     items = sorted({o for s in t["steps"] for o in s.get("objects", [])})[:8]
     imgs = [await f.read() for f in frames]
     try:
-        return coach.ready(imgs, t["title"], items)
+        return coach.ready(imgs, t["title"], items, lang)
     except Exception as e:
         return {"have": [], "missing": [], "say": "", "error": str(e)[:200]}
 
 
 @app.post("/api/tasks/{tid}/ask")
-async def ask(tid: str, step: int = Form(...), q: str = Form(...), frame: UploadFile | None = File(None)):
-    """练习中学生按住说话问问题 → 看着镜头回答一句。"""
+async def ask(tid: str, step: int = Form(...), q: str = Form(...), done: str = Form(""), lang: str = Form("en"), frame: UploadFile | None = File(None)):
+    """练习中学生说话（问题或陈述）→ 看着镜头像老师一样接话。"""
     t = load(tid)
+    done_set = {int(x) for x in done.split(",") if x.strip().isdigit()}
     try:
-        return coach.answer(await frame.read() if frame else None, t["title"], t["steps"], step, q[:300])
+        return coach.answer(await frame.read() if frame else None, t["title"], t["steps"], step, q[:300], done_set, lang)
     except Exception:
         return {"say": "Good question. Let's ask your teacher."}
 
@@ -784,6 +830,7 @@ def _code(v: dict) -> str | None:
         return "H"
     if v.get("verified") == "self" or v.get("result") == "self":   # 没有被镜头或老师确认：不算独立
         return "IS"
+    # verified == "agreed"：学生说做完了，镜头看了没有矛盾（只用于无危险的步骤）→ 和镜头确认一样算
     return "I" if v.get("level") == 0 and v.get("result") == "clean" else "IS"
 
 
@@ -880,7 +927,7 @@ def _auto_note(t: dict, s: dict) -> str:
             parts.append({"unsafe": f"unsafe action seen at step {i}", "ahead": f"tried to skip step {i}",
                           "wrong": f"step {i} started the wrong way"}.get(fl, f"{fl} at step {i}"))
     n_done = len(s["results"])
-    cam = sum(1 for v in s["results"].values() if v.get("verified") == "camera")
+    cam = sum(1 for v in s["results"].values() if v.get("verified") in ("camera", "agreed"))
     tch = sum(1 for v in s["results"].values() if v.get("verified") == "teacher")
     head = (f"Practiced on the app, {n_done}/{len(t['steps'])} steps reached "
             f"({cam} confirmed by camera, {tch} confirmed by teacher).")
@@ -973,6 +1020,25 @@ def report(tid: str, student: str):
     return _parse(resp.output_text)
 
 
+# ---------- 语音合成（Kokoro，开放权重；没装模型时前端用手机自带声音） ----------
+@app.get("/api/tts/status")
+def tts_status():
+    return {"ok": tts.available(), "voice": tts.VOICE}
+
+
+@app.get("/api/tts")
+def tts_speak(text: str, voice: str | None = None, speed: float | None = None, lang: str = "en"):
+    if not tts.available():
+        raise HTTPException(404, "tts model not installed")
+    if not text.strip():
+        raise HTTPException(400)
+    try:
+        wav = tts.speak(text, voice, speed, lang)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, str(e)[:200])
+    return Response(wav, media_type="audio/wav", headers={"Cache-Control": "max-age=86400"})
+
+
 # ---------- 语音 ----------
 @app.post("/api/transcribe")
 async def transcribe(audio: UploadFile = File(...)):
@@ -985,9 +1051,13 @@ async def transcribe(audio: UploadFile = File(...)):
     with tempfile.TemporaryDirectory() as td:
         src, dst = Path(td) / ("in" + Path(audio.filename or "a.webm").suffix), Path(td) / "out.wav"
         src.write_bytes(raw)
-        subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-i", str(src), "-ac", "1", "-ar", "16000", str(dst)],
+        t0 = time.time()
+        # 单声道 16k；头尾各补 0.4 秒静音（识别模型会吃掉太靠边的字）
+        subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-i", str(src), "-ac", "1", "-ar", "16000",
+                        "-af", "adelay=400|400,apad=pad_dur=0.4", str(dst)],
                        check=True, capture_output=True)
         wav = dst.read_bytes()
+        secs = max(0, (len(wav) - 44) / 32000)
     base = os.getenv("META_BASE_URL", "https://api.meta.ai/v1")
     r = requests.post(f"{base}/asr/transcribe", timeout=120,
                       headers={"Authorization": f"Bearer {os.environ['MODEL_API_KEY']}", "Accept": "application/json"},
@@ -997,6 +1067,7 @@ async def transcribe(audio: UploadFile = File(...)):
     if r.status_code >= 400:
         raise HTTPException(502, f"transcribe {r.status_code}: {r.text[:200]}")
     body = r.json()
+    print(f"transcribe: {secs:.1f}s audio, {int((time.time() - t0) * 1000)} ms", flush=True)
     texts = []
 
     def walk(x):  # 返回结构没写清楚：把所有 transcript/text 字段收集起来
@@ -1010,7 +1081,9 @@ async def transcribe(audio: UploadFile = File(...)):
             for v in x:
                 walk(v)
     walk(body)
-    return {"text": " ".join(t.strip() for t in texts if t.strip()), "raw": body}
+    text = " ".join(t.strip() for t in texts if t.strip())
+    print(f"transcribe -> {text!r}", flush=True)
+    return {"text": text, "secs": round(secs, 1)}
 
 
 STATIC = ROOT / "static"

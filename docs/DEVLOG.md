@@ -4,6 +4,112 @@
 
 ---
 
+## 2026-11-04
+
+### 13:30 · 收尾：修 bug、演示视频、README、推送 GitHub
+- Bug：学生首页的 "Go"（打字）按钮调用的 typed() 在 11/2 11:55 改录音代码时被误删，打字无效。已恢复（static/index.html）。
+- 整理演示数据：归档测试任务（Use a computer、Learn AI、hot pot ×2、Ask ChatGPT、Take my pills、重复的泡茶和叠衣服），清空学生请求和练习记录；保留"泡茶"和"叠 T 恤"两个样例任务。
+- 演示视频 show-me-once-demo.mp4（2:39，1920×1080，存在 ~/Documents/）：
+  - 老师建任务（追问、步骤、安全标记）：浏览器里真实运行、真实模型输出的截图。
+  - 学生练习：Playwright 录的真实前端，后端是回放测试中模型输出的 mock，镜头用测试图片；画面上一直标注 "Interface recording · replayed model output · test images as the camera"。
+  - 老师数据表和 agents 页：mock 里的 4 次练习是虚构数据，画面一直标注 "Sample data · for illustration"。
+  - 旁白 Kokoro am_michael，教练 Kokoro af_heart；结尾写明"开发者演示，尚未在学生身上测试"。
+- README：加上镜头画面标注、免按键对话、追问、Kokoro 声音、"学生说完成+镜头认可"三种确认方式、中文限制、速度限制；运行步骤加 tts_setup.py。
+- sync_public.py：加入 src/tts.py、tts_setup.py、smoke_clarify.py、smoke_mark.py 和叠衣服样例任务；requirements 加 soundfile、kokoro-onnx；.gitignore 排除模型和语音缓存。
+
+## 2026-11-02
+
+### 13:25 · 卡在"抚平"这一步、太啰嗦、不接受学生说做完了
+- 日志：第 2 步 "Smooth shirt with both hands" 没有看得见的结果，模型一直 working、从不 done，每 8 秒换一句 "keep smoothing"；学生说 "Can we continue?" 只被回了一句话，没推进。
+- 改：
+  1. 学生说做完/要继续 → `coach.answer` 返回 claims_done；画面不矛盾且这一步无危险 → 进入下一步，记为 verified="agreed"（数据表 ◎，算独立）。有危险的步骤仍要镜头或老师确认。
+  2. 动作类步骤（无危险）做了 20 秒以上、≥4 次 working、没出错 → 自动算完成。
+  3. 每一步的提示只说一次（开始 5 秒后）；停 20 秒没动再提醒一次；做错/做早/危险/看不清太久照常立即说。
+  4. PLAN_PROMPT 规则 5：每一步必须改变镜头能看到的东西，抚平/整理/检查/等待并进产生结果的那一步。
+- 叠衣服任务（be99304548）：第 1、2 步合并成 "Lay shirt flat, front side down."，共 7 步，依赖重排；清掉今天的测试记录。
+- 文件：src/coach.py、app.py、static/index.html
+- 回退：data/out/app_coach_v14.bak.py、coach_v12.bak.py、index_coach_v16.bak.html
+
+### 13:05 · 镜头画面上实时标注（圈 + 箭头）
+- Dan 提出：既然能看懂画面，就在镜头画面上画简单的箭头标注该怎么做，做实时视觉交互。
+- 做法：WATCH / WATCH_FLEX 提示词增加 "mark"：要动的东西在画面的位置（百分比）+ 该去的位置 + 1–3 个词的标签；和判断是同一次调用，不加延迟。`coach._mark()` 清洗坐标。
+- 前端：镜头上叠一层 SVG（.ov）：脉动的青色圆圈 + 虚线流动的弯箭头 + 标签；done 时清掉；4 秒没新标注自动消失。前置镜头画面是镜像，x 翻转。
+- 关键修正：视频是 cover 裁切显示的，grab() 现在按屏幕上显示的那一块裁切后再送模型，坐标才能对上。
+- 测试 job 109（图卡当镜头）：茶包被圈住、箭头指向杯子；水壶被圈住。位置准确。
+- 限制：1.5–3 秒更新一次，不是平滑 AR；偶尔会圈偏。SAM 精准轮廓版本留到视频拍完后再考虑。
+- 文件：src/coach.py、static/index.html、smoke_mark.py（新）
+- 回退：data/out/coach_v11.bak.py、index_coach_v15.bak.html
+
+### 12:45 · 中文开关隐藏（SHOW_LANG=false，默认英文）
+- Dan 决定测试和演示都用英文。中文代码保留，static/index.html 里 SHOW_LANG 改 true 即恢复。
+
+### 12:25 · 开始前指导摆放；中文模式
+- 摆放：READY 提示词新增 "view"（太近/太远/没对着桌子/太暗 → 一句具体调整，如 "Tilt the phone down toward the table"）。开始前循环最多 8 轮：画面不对先说怎么调，再看东西齐不齐，每轮给 5 秒调整。练习中"看不清"也用模型给的具体建议。
+- 中文：学生首页加 中文/English 开关（localStorage）。`coach.lang_note()` 拼进 intent/ready/watch/watch_flex/answer 五个提示词；步骤和标题用 Spark 翻译一次缓存在 task.json["i18n"]（步骤改了自动重翻），POST /sessions 返回 texts/title_l；固定句子（问候、停下、夸奖、衔接）全部双语；Kokoro 中文声音 zf_xiaoxiao（lang=cmn）。
+- 测试 job 105：翻译准确（"把 T 恤平放在桌子上。/ 放平"）；中文判断、接话、摆放指导都正常。**Meta 语音识别不支持中文**（Kokoro 中文音频送去识别得到乱码），所以中文模式用浏览器自带识别（webkitSpeechRecognition, zh-CN），不可用时打字。
+- 文件：src/coach.py、src/tts.py、app.py、static/index.html、smoke_zh.py（新）
+- 回退：data/out/app_coach_v13.bak.py、coach_v10.bak.py、index_coach_v14.bak.html
+
+### 11:55 · 练习时能对话；判断更顺、提示更像老师
+- Dan 实测叠衣服：17 秒只判断 6 次（2–4 秒一次），结果在 done 和"看不见手"之间跳，"连续两次 done"凑不齐；提示在"铺平"和"让我看手"之间交替；开始后 12 秒内设计成不说话，所以几乎没有语音互动。
+- 对话：练习时麦克风常开（earLoop）。原始音频进 0.6 秒环形缓冲，学生一开口就从缓冲开始录，说完停顿 1.3 秒自动结束，转成 16k WAV 送识别（不再用 MediaRecorder，开头不会丢）。教练自己在说话时不听。学生说的不只是问题，陈述（"我放桌上了"）也会被接话并带到下一步：ANSWER 提示词改成"像站在旁边的老师接话"，并传入已完成/可做的步骤（app.py /ask 多了 done 参数）。
+- 判断：最近 3 次里 2 次 done 就算过；"看不清"不再否定之前的 done；提示在开始 5 秒后就说；"看不清"只在连续 10 秒后说一次固定的话（"Move the phone back a little…"），不再来回换。
+- 速度：每次送 2 帧、512px。
+- 开始前的提示改成"把手机垫高一点、微微朝下"。
+- 文件：static/index.html、src/coach.py、app.py
+- 回退：data/out/app_coach_v12.bak.py、coach_v9.bak.py、index_coach_v13.bak.html
+
+### 11:30 · 批准即分配；语音输入不再切头切尾
+- Dan 实测：老师批准了 "Fold a T-shirt" 但没分配学生，学生端看不到。改成 Approve 时没选人就自动分给全班（app.py edit_task）。已把 be99304548 手动分给三个学生。
+- 语音：转写结果是 "Learn"/"Learn ai"（说的是 "I want to learn AI"），头尾被切。原因：点按钮后麦克风要 ~1 秒才开始录，用户已经在说；结束要再点一下。改成：
+  - 点 "Tap to start"（和进入练习）时就提前打开麦克风，之后按下立刻开始录（static/index.html openMic/listen）。
+  - 停顿自动结束：听到说话后安静 1.3 秒自动停；6 秒没人说也停；最长 12 秒。按钮上有音量条。
+  - 服务端转 WAV 时头尾各补 0.4 秒静音，并打印音频长度和耗时（app.py transcribe）。
+- 回退：data/out/app_coach_v11.bak.py、index_coach_v12.bak.html
+
+### 11:05 · 目标太宽先追问；电脑/手机任务不再拒绝
+- 为什么：Dan 实测老师端输入 "learn AI" 被拒绝，"use the computer" 拆出来的步骤太泛（像开机，不像用电脑）。根源是没先问清楚要做什么。
+- 追问：新增 `coach.clarify()` + `POST /api/tasks/clarify`（Spark）。目标够具体（make a cup of tea）→ 直接拆步骤；太宽 → 返回一个问题和 3–5 个具体选项（本身就是可用的目标），老师点一个或自己输入，也可以"anyway"直接拆。
+- 电脑/手机任务：PLAN_PROMPT 规则 9 改成允许，要求写到具体 app、按钮、屏幕文字，done_state 是屏幕上出现什么。拒绝只针对吃药、电动工具等，拒绝时要给原因 + 替代建议。Steps 页对屏幕类任务提示"镜头看不到屏幕，由老师确认"。
+- 实测 job 098："use the computer" → 发邮件 / 上网课 / 查公交 / 填求职表；"learn AI" → 问 ChatGPT 作业 / 用 AI 写邮件 / 列购物清单 / 练面试；"cleaning" → 擦桌子 / 扫地 / 倒垃圾 / 拖地；"make a cup of tea" 直接通过。"Ask ChatGPT a question" 拆出 7 步，每步写到具体按钮和屏幕；"take my pills" 拒绝并建议改成"倒杯水交给照顾者"。
+- 文件：src/coach.py、app.py、static/index.html、smoke_clarify.py（新）
+- 回退：data/out/app_coach_v10.bak.py、coach_v8.bak.py、index_coach_v11.bak.html
+
+## 2026-11-01
+
+### 21:15 · 学生听到的声音换成 Kokoro（开放权重 TTS，本机生成）
+- 为什么：手机自带声音太机械；Meta 没有开放 TTS。Kokoro-82M 开放权重（Apache-2.0），在 Mac CPU 上就能跑，也对上 Open weights 奖项。
+- 安装：tts_setup.py（Dan 在终端运行一次）：pip install kokoro-onnx soundfile；模型 kokoro-v1.0.onnx（325 MB）+ voices-v1.0.bin 放在 data/tts_model/（已加入 .gitignore，公开仓库 README 要写下载步骤）。
+- 代码：src/tts.py（新）`speak(text)` 返回 WAV，按文本哈希缓存到 data/coach/tts_cache/；app.py 新增 `GET /api/tts?text=&speed=`、`GET /api/tts/status`，启动时后台预加载模型。
+- 前端：say() 优先请求服务器声音，失败自动退回手机自带声音；当前步骤旁"接下来可做"的两步提前生成；老师首页 Voice 区显示当前声音。
+- 修了一个死锁：speak() 持有 Lock 再调用同样要拿锁的 _engine()，第一次请求永远挂住。改成 RLock + 先取引擎再加锁。
+- 实测：第一次生成一句 1.8 秒（含模型已预热），缓存命中 7 毫秒。默认声音 af_heart，等 Dan 试听后定。
+- 回退：data/out/app_coach_v9.bak.py、index_coach_v10.bak.html；删掉 src/tts.py 和 app.py 里的 tts 两处即可。
+
+### 20:55 · 学生可以打字；说话像真人老师；依赖推断不再摇摆
+- 打字：学生首页和练习中的 Ask 都加了输入框，说话和打字都可以（static/index.html）。
+- 说话风格：src/coach.py 新增 VOICE（像站在旁边的耐心老师：短句、具体的夸奖、不说 wrong、一次一个意思），拼进 WATCH、WATCH_FLEX、READY、ANSWER、INTENT 五个提示词。镜头判为 done 时模型顺便给一句具体夸奖（praise）。
+- 衔接：做完一步后，先说具体夸奖，再自然带到下一步（"Nice, the kettle's full. Now let's put it on its base."），每三步叫一次名字。老师录过音的步骤：夸完接老师的录音。结束语也带名字。语速 0.92，音调略高。
+- 实测（job 086）：检查桌面 → "I see the kettle and mug. Let's find a spoon and tea bag."；问能不能跳步 → 委婉拒绝并让问老师。
+- **发现并修复**：依赖推断（infer_order）单次结果会摇摆。10/28 说 1、2 步互不依赖，今晚一次却把 8 步连成固定链。改成：要求每条依赖给出物理原因，过滤掉"习惯/通常/顺序"类理由，跑两次取交集，再做传递闭包。order_test.py 跑 3 遍结果一致：1–3 步任意顺序，倒水等烧开，泡茶等倒水。代价是约 50 秒，所以旧任务改成先按固定顺序、后台推断（app.py get_task）。
+- 文件：static/index.html、src/coach.py、app.py、order_test.py（新）
+- 回退：data/out/index_coach_v9.bak.html、coach_v7.bak.py、app_coach_v8.bak.py
+
+### 20:38 · 学生首页先显示 "Tap to start"（手机上没声音）
+- 为什么：Dan 实测听不到声音。手机浏览器规定，页面要先被点一下才能用语音朗读，所以打开页面时自动说的问候被拦了。
+- 改了什么：学生首页先显示一个大按钮 "Tap to start"，点它时在同一次点击里读出问候，之后的语音都能正常播放。
+- 文件：static/index.html。不用重启服务，刷新页面就能生效。
+
+### 20:30 · 准备提交：公开仓库副本 + 新 README + 演示剧本
+- 停掉了 10/28 起一直开着的公网链接（job 082）。
+- 新建 ~/Documents/show-me-once：只放教练相关文件（app.py、serve.py、src/coach|agents|safety|spark.py、static/index.html、smoke_*.py、docs/DEVLOG.md、样例泡茶任务和 3 个样例学生）。不含 .env、学生练习数据、镜头日志、旧药箱代码。
+- 新增 sync_public.py：开发目录改完后运行一次，就把公开副本更新到最新（样例任务会自动清掉学生数据、录音、照片）。
+- README.md（英文）重写成现在的产品：问题、功能、多 agent、用到的 Meta 模型、诚实的局限、运行方法。另加 LICENSE（MIT）和 .gitignore。
+- serve.py：输出改成英文；自动创建 jobs/ 文件夹（公开副本里没有这个文件夹，原来会报错）。开发目录同步了这一版。
+- check_public.py：确认公开副本能独立运行（job 084）：首页、任务、学生、依赖推断、图卡都正常，一次真实镜头判断也正常。
+  - 发现：AI 图里水壶底座靠近水，被判为 unsafe（符合"电和水"规则）。拍摄时底座要放得离水槽远一点。
+- 产品文档顶部新增"11/1 最终版：3 分钟 Demo 剧本与拍摄清单"，旧剧本标为过时。
+
 ## 2026-10-28
 
 ### 14:12 · 灵活顺序：agent 认出学生在做哪一步，不再按固定顺序判断

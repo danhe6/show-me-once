@@ -9,3 +9,5 @@ data/coach/tasks/_archived_*/
 serve.log
 *.tmp
 _to_delete/
+data/tts_model/
+data/coach/tts_cache/

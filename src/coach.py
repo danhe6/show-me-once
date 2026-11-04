@@ -60,6 +60,9 @@ Rules (follow all):
 4. "cue" = the single key word for a quick reminder (e.g. "Cup.", "Lid.", "Blue button.").
 5. "done_state" = what a camera looking at the counter/table would see when the step is finished (concrete and visible,
    e.g. "a mug sits under the spout"). Never use "the person understands" or anything invisible.
+   Every step must CHANGE something the camera can see. Do not make a separate step for smoothing, adjusting,
+   checking, tidying or waiting; fold those into the step that produces the visible result
+   (e.g. "Lay the shirt flat, front side down." not "Smooth the shirt.").
 6. "objects" = 1-3 short noun phrases a camera should track for this step (e.g. "mug", "water tank").
 7. "safety" = a short warning if the step involves heat, blades, electricity near water, or chemicals; else null.
    Safety rules (the steps themselves must follow these; add an extra step when a rule needs one):
@@ -69,7 +72,11 @@ Rules (follow all):
    you cannot pour water before boiling it; but opening the tea bag and boiling water can happen in any order).
 9. A caregiver supervises the first practices. Everyday household tasks (kettle, microwave, coffee maker, toaster,
    washing machine, folding, packing, simple food prep) are ALLOWED: just mark risky steps with "safety".
-   Set "refuse" (short reason) ONLY if the task is not hands-on or involves {refuse}. Otherwise "refuse" must be null.
+   Tasks on a computer, tablet or phone (send an email, write a document, search the web, ask an AI assistant a
+   question, join a video call) are ALLOWED: name the exact app, button, menu and on-screen text in each step,
+   and make "done_state" what appears on the screen.
+   Set "refuse" (one plain sentence for the teacher, plus a concrete suggestion of what to make instead) ONLY if the
+   task involves {refuse}, or is purely abstract with nothing to do (e.g. "understand fractions"). Otherwise "refuse" must be null.
 Before answering, re-check every step against rules 1-6 and fix any that break them.
 Return ONLY JSON:
 {{"title": "short task name, e.g. Make coffee", "refuse": null,
@@ -228,7 +235,62 @@ def make_card(step: dict, anchor: bytes | None, tries: int = 2, done: list[str] 
     return last
 
 
+# ---------- 语言 ----------
+LANGS = {"en": "English", "zh": "简体中文 (Simplified Chinese, natural spoken Mandarin)"}
+
+
+def lang_note(lang: str) -> str:
+    if lang == "en":
+        return ""
+    return (f"\nIMPORTANT: Everything the learner will hear or read ('say', 'seeing', 'hint', 'praise', 'question') "
+            f"must be written in {LANGS.get(lang, lang)}. Keep JSON keys in English.")
+
+
+TRANSLATE = """Translate this task for a learner with an intellectual disability into {language}.
+Short, plain, spoken style; one action per step; keep the meaning exact. Also give a one- or two-word cue for each step.
+Title: {title}
+Steps: {steps}
+Return ONLY JSON {{"title": "...", "steps": [{{"text": "...", "cue": "..."}}, ...]}} in the same order."""
+
+
+def translate_steps(steps: list[dict], lang: str, title: str = "") -> dict:
+    res = _ask(SPARK, TRANSLATE.format(language=LANGS.get(lang, lang), title=title, steps=json.dumps([s["text"] for s in steps])),
+               effort="low", max_out=3000)
+    out = res.get("steps", [])
+    if len(out) != len(steps):
+        raise ValueError("translation length mismatch")
+    return {"title": str(res.get("title") or title),
+            "steps": [{"text": str(x.get("text", "")), "cue": str(x.get("cue", ""))} for x in out]}
+
+
+# ---------- 说话风格：像一位温柔、耐心、就站在旁边的老师 ----------
+VOICE = """How you talk (every sentence the learner hears):
+- Like a warm, patient teacher standing right beside them. Short sentences, everyday words, contractions ("let's", "you're").
+- Calm and encouraging. Never say "wrong", "no", "incorrect" or "failed"; say "let's try", "almost", "one more time".
+- Praise is specific to what they just did ("You filled it right up!", "Nice, the bag is in the mug."), never just "Good job".
+- One idea at a time. No exclamation overload, no baby talk: they are teens or adults."""
+
 # ---------- 4. 练习时看镜头：一边看一边提示 ----------
+def _mark(m) -> dict | None:
+    """镜头上的标注：清洗成 0-100 的数字，不合法就丢掉。"""
+    if not isinstance(m, dict):
+        return None
+    try:
+        x, y = float(m.get("x")), float(m.get("y"))
+    except (TypeError, ValueError):
+        return None
+    if not (0 <= x <= 100 and 0 <= y <= 100):
+        return None
+    out = {"x": round(x, 1), "y": round(y, 1), "label": str(m.get("label") or "")[:24]}
+    try:
+        tx, ty = float(m.get("to_x")), float(m.get("to_y"))
+        if 0 <= tx <= 100 and 0 <= ty <= 100 and (abs(tx - x) > 3 or abs(ty - y) > 3):
+            out["to_x"], out["to_y"] = round(tx, 1), round(ty, 1)
+    except (TypeError, ValueError):
+        pass
+    return out
+
+
 VIEW_NOTE = {
     "front": ("The phone stands IN FRONT of the learner and faces them (front camera), so you see the learner's face, "
               "body and hands from the front, with the table between you. Their right hand appears on the LEFT side "
@@ -250,7 +312,13 @@ Return ONLY JSON:
 {{"seeing": "what the learner is doing right now, at most 10 words, starting with 'You are' (or 'I can't see your hands')",
   "status": "not_started" | "working" | "done" | "wrong" | "ahead" | "unsafe" | "unclear",
   "hint": "the single next tiny action, at most 8 calm words, or null if done",
-  "evidence": "if done: the visible thing that proves it, else null"}}
+  "evidence": "if done: the visible thing that proves it, else null",
+  "praise": "if done: at most 8 words of specific, warm praise for what they just did, else null",
+  "mark": {{"x": 0-100, "y": 0-100, "to_x": 0-100 or null, "to_y": 0-100 or null, "label": "1-3 words"}} or null}}
+"mark" = where to draw a hint on the NEWEST frame: (x,y) = the thing to touch or move, as percent of image width/height
+from the top-left; (to_x,to_y) = where it should go, or null for a "press/hold/pick up" action. Give a mark whenever
+you can see the item for the next action; null if not visible.
+{voice}
 Status rules:
 - "done": the finished state is clearly visible in the newest frame. Be strict: if unsure, use "working".
 - "working": they are doing this step or getting ready; hint = the next small movement.
@@ -261,7 +329,7 @@ Status rules:
 - "unclear": the hands or the key items are not in view; hint = how to move the phone or the items."""
 
 
-def watch(frames: list[bytes], steps: list[dict], i: int, ref: bytes | None = None, view: str = "back") -> dict:
+def watch(frames: list[bytes], steps: list[dict], i: int, ref: bytes | None = None, view: str = "back", lang: str = "en") -> dict:
     s = steps[i]
     hz = s.get("hazards") or safety.hazards(s)
     rules = safety.watch_text(hz)
@@ -279,34 +347,61 @@ def watch(frames: list[bytes], steps: list[dict], i: int, ref: bytes | None = No
                                 "ignore faces and the background." if view == "front" else
                                 "The phone looks at the work area (table or counter) from the learner's side."),
                      watch_rules=("Safety: watch for " + rules + ".") if rules else "",
-                     unsafe_def=rules or "something that could hurt them is about to happen")
-    res = _ask(SPARK, p, imgs, effort="minimal", max_out=1500)
+                     unsafe_def=rules or "something that could hurt them is about to happen", voice=VOICE)
+    res = _ask(SPARK, p + lang_note(lang), imgs, effort="minimal", max_out=1500)
     if res.get("status") not in ("not_started", "working", "done", "wrong", "ahead", "unsafe", "unclear"):
         res["status"] = "unclear"
+    res["mark"] = _mark(res.get("mark"))
     return res
 
 
 ORDER = """These are the steps of "{title}", written by a teacher:
 {steps}
-For each step, list the step numbers that MUST be finished before it can be done. Only real dependencies: something
-physically needed (water must be boiled before pouring) or a safety reason. If two steps can happen in either order,
-neither needs the other. Return ONLY JSON: {{"needs": [[numbers for step 1], [numbers for step 2], ...]}}"""
+Which steps truly depend on another step? A dependency exists ONLY when the step is physically impossible or unsafe
+before the other one (you cannot pour water that was never boiled; you cannot plug in a kettle you have not placed
+on its base). Habit, convention or "it is usually done first" is NOT a dependency: putting a tea bag in a mug and
+filling a kettle can happen in either order; so can fetching two different items.
+For each step, list every dependency with its physical reason. Return ONLY JSON:
+{{"deps": [{{"step": 2, "needs": 1, "reason": "..."}}, ...]}}
+(an empty list means every step can be done in any order)."""
+
+_WEAK = re.compile(r"\b(usual|usually|convention|habit|order|sequence|typical|normally|first step|logical|flow|natural)\b", re.I)
+
+
+def _order_once(title: str, steps: list[dict]) -> set[tuple[int, int]]:
+    n = len(steps)
+    res = _ask(WONDER, ORDER.format(title=title, steps="\n".join(f"{i + 1}. {s['text']}" for i, s in enumerate(steps))),
+               effort="low", max_out=4000)
+    out = set()
+    for d in res.get("deps", []):
+        try:
+            i, j = int(d["step"]) - 1, int(d["needs"]) - 1
+        except (KeyError, TypeError, ValueError):
+            continue
+        reason = str(d.get("reason") or "")
+        if 0 <= i < n and 0 <= j < n and i != j and reason and not _WEAK.search(reason):
+            out.add((i, j))
+    return out
 
 
 def infer_order(title: str, steps: list[dict]) -> list[list[int]]:
-    """推断每一步真正依赖哪些步骤（0 开始的下标）。失败时退回固定顺序。"""
+    """推断每一步真正依赖哪些步骤（0 开始的下标）。
+    跑两次、只保留两次都认可且有物理原因的依赖（单次结果会摇摆：有时把习惯顺序当成依赖）。失败时退回固定顺序。"""
     n = len(steps)
     try:
-        res = _ask(WONDER, ORDER.format(title=title, steps="\n".join(f"{i + 1}. {s['text']}" for i, s in enumerate(steps))),
-                   effort="low", max_out=3000)
-        out = []
-        for i, row in enumerate(res.get("needs", [])[:n]):
-            out.append(sorted({int(x) - 1 for x in row if str(x).isdigit() and 0 < int(x) <= n and int(x) - 1 != i}))
-        if len(out) == n:
-            return out
+        deps = _order_once(title, steps) & _order_once(title, steps)
+        # 传递闭包：A 依赖 B、B 依赖 C → A 也依赖 C（练习时"可做"判断更稳）
+        changed = True
+        while changed:
+            changed = False
+            for (i, j) in list(deps):
+                for (j2, k) in list(deps):
+                    if j2 == j and (i, k) not in deps and i != k:
+                        deps.add((i, k))
+                        changed = True
+        return [sorted(j for (i2, j) in deps if i2 == i) for i in range(n)]
     except Exception:  # noqa: BLE001
-        pass
-    return [[i - 1] if i else [] for i in range(n)]
+        return [[i - 1] if i else [] for i in range(n)]
 
 
 def available(steps: list[dict], done: set[int]) -> list[int]:
@@ -328,7 +423,13 @@ Return ONLY JSON:
   "step": the number of the step they are working on or just finished (from the lists above), or null,
   "status": "idle" | "working" | "done" | "too_early" | "wrong" | "unsafe" | "unclear",
   "hint": "the single next tiny action, at most 8 calm words, or null",
-  "evidence": "if done: the visible thing that proves it, else null"}}
+  "evidence": "if done: the visible thing that proves it, else null",
+  "praise": "if done: at most 8 words of specific, warm praise for what they just did, else null",
+  "mark": {{"x": 0-100, "y": 0-100, "to_x": 0-100 or null, "to_y": 0-100 or null, "label": "1-3 words"}} or null}}
+"mark" = where to draw a hint on the NEWEST frame: (x,y) = the thing to touch or move, as percent of image width/height
+from the top-left; (to_x,to_y) = where it should go, or null if it is a "press/hold/pick up" action. Give a mark
+whenever you can see the item for the next action (also when status is "working" or "idle"); null if not visible.
+{voice}
 Status rules:
 - "done": that step's finished state is clearly visible in the newest frame. Be strict.
 - "working": they are doing one of the steps they may do now.
@@ -340,7 +441,7 @@ Status rules:
 
 
 def watch_flex(frames: list[bytes], steps: list[dict], done: set[int], title: str, focus: int | None = None,
-               ref: bytes | None = None, view: str = "back") -> dict:
+               ref: bytes | None = None, view: str = "back", lang: str = "en") -> dict:
     avail = available(steps, done)
     locked = [i for i in range(len(steps)) if i not in done and i not in avail]
     fmt = lambda ids: "; ".join(f"{i + 1}. {steps[i]['text']} (done when: {steps[i].get('done_state', '')})" for i in ids) or "none"  # noqa: E731
@@ -352,10 +453,11 @@ def watch_flex(frames: list[bytes], steps: list[dict], done: set[int], title: st
         avail=fmt(avail), locked=fmt(locked),
         ref_note=("The FIRST image is the teacher's reference photo of step %d being done correctly." % (focus + 1)) if ref and focus is not None else "",
         k=len(frames), watch_rules=("Safety: watch for " + rules + ".") if rules else "",
-        unsafe_def=rules or "something that could hurt them is about to happen")
-    res = _ask(SPARK, p, ([ref] if ref else []) + list(frames), effort="minimal", max_out=1500)
+        unsafe_def=rules or "something that could hurt them is about to happen", voice=VOICE)
+    res = _ask(SPARK, p + lang_note(lang), ([ref] if ref else []) + list(frames), effort="minimal", max_out=1500)
     if res.get("status") not in ("idle", "working", "done", "too_early", "wrong", "unsafe", "unclear"):
         res["status"] = "unclear"
+    res["mark"] = _mark(res.get("mark"))
     try:
         k = int(res.get("step")) - 1
         res["step"] = k if 0 <= k < len(steps) else None
@@ -371,6 +473,29 @@ def judge(frame: bytes, steps: list[dict], i: int) -> dict:   # 旧接口，保�
     return watch([frame], steps, i)
 
 
+# ---------- 2b. 目标太宽时先追问一个问题 ----------
+CLARIFY = """A special-education teacher typed this skill for a student to learn: "{goal}".
+{seen_note}
+We will turn it into a task analysis (4-10 physical steps, done in one place, one session). That only works if the
+goal names ONE concrete outcome. Examples:
+- specific: "make a cup of tea", "fold a T-shirt", "send an email to my teacher", "ask ChatGPT a question".
+- too broad: "use the computer", "learn AI", "cooking", "cleaning", "be more independent".
+If the goal is specific enough, return {{"specific": true}}.
+If not, return ONE friendly question for the teacher with 3-5 options. Each option must itself be a specific goal
+we could use directly (a short phrase starting with a verb), covering the most likely things this student would
+actually need (daily living, school, a first job). Return ONLY JSON:
+{{"specific": false, "question": "at most 12 words", "options": ["Send an email to my teacher", "..."]}}"""
+
+
+def clarify(goal: str, seen: dict | None = None) -> dict:
+    note = f"What we can see in the photo they attached: {json.dumps(seen)}" if seen and seen.get("object") else ""
+    res = _ask(SPARK, CLARIFY.format(goal=goal, seen_note=note), effort="low", max_out=1500)
+    if res.get("specific") or not res.get("options"):
+        return {"specific": True}
+    return {"specific": False, "question": res.get("question") or "What exactly would you like them to learn?",
+            "options": [str(o) for o in res["options"]][:5]}
+
+
 # ---------- 6. 对话式教练：听学生说想做什么 → 看桌上东西齐不齐 → 回答学生的问题 ----------
 INTENT = """A learner (teen or adult with an intellectual disability) was asked "What do you want to do today?"
 They said: "{said}"
@@ -379,12 +504,13 @@ Pick the task they mean. Speech-to-text can be messy, so match by meaning ("tea"
 Return ONLY JSON: {{"task_id": "id from the list, or null if none fits",
  "say": "what the coach says back, at most 14 warm, simple words"}}
 If a task fits, "say" confirms it (e.g. "Great, let's make tea together!").
-If none fits, "say" is kind (e.g. "That sounds fun! I'll ask your teacher to add it.")."""
+If none fits, "say" is kind (e.g. "That sounds fun! I'll ask your teacher to add it.").
+""" + VOICE
 
 
-def intent(said: str, tasks: list[dict]) -> dict:
+def intent(said: str, tasks: list[dict], lang: str = "en") -> dict:
     lst = json.dumps([{"id": t["id"], "title": t["title"]} for t in tasks])
-    res = _ask(SPARK, INTENT.format(said=said, tasks=lst), effort="minimal", max_out=800)
+    res = _ask(SPARK, INTENT.format(said=said, tasks=lst) + lang_note(lang), effort="minimal", max_out=800)
     if res.get("task_id") not in {t["id"] for t in tasks}:
         res["task_id"] = None
     return res
@@ -394,26 +520,48 @@ READY = """A learner is about to start the task "{title}". The phone camera look
 Things they will need: {items}.
 Count only separate things you can pick up or move (a kettle's switch or base is part of the kettle; ignore
 things that only appear later, like hot water). Look at the newest frame. Return ONLY JSON:
+Also judge the camera view for coaching: can you see the whole work surface AND the place where the hands will be?
+Problems: too close (items cut off), too far (items tiny), pointing at the ceiling/wall/face instead of the table,
+too dark, lens blocked.
 {{"have": ["needed things you can clearly see"], "missing": ["needed things you cannot see"],
- "say": "at most 16 warm, simple words: name what you see, then ask for what is missing (or say we are ready)"}}"""
+ "view": "ok" | "one short instruction to fix the view, e.g. 'Move the phone back a little' / 'Tilt the phone down toward the table' / 'Turn on a light'",
+ "say": "at most 18 words, warm: if the view needs fixing say that first; else name what you see and kindly ask for what is missing, or say we're ready"}}
+""" + VOICE
 
 
-def ready(frames: list[bytes], title: str, items: list[str]) -> dict:
-    res = _ask(SPARK, READY.format(title=title, items=", ".join(items)), list(frames)[-1:], effort="minimal", max_out=800)
+def ready(frames: list[bytes], title: str, items: list[str], lang: str = "en") -> dict:
+    res = _ask(SPARK, READY.format(title=title, items=", ".join(items)) + lang_note(lang), list(frames)[-1:], effort="minimal", max_out=800)
     res.setdefault("missing", [])
+    v = str(res.get("view") or "ok")
+    res["view_ok"] = v.strip().lower() in ("ok", "good", "fine", "")
     return res
 
 
-ANSWER = """You are a calm, kind job coach. A learner with an intellectual disability is doing "{title}",
-step {n} of {total}: "{text}". They asked you: "{q}"
-The image is what the camera sees right now.
-Answer in at most 15 simple words, one idea, about THIS step only. Use what you see (colors, left/right from the
-learner's side). Never give medical advice. If they ask to skip or to do something unsafe, gently say no and
-suggest asking the teacher. Return ONLY JSON: {{"say": "..."}}"""
+ANSWER = """You are a warm, patient teacher standing next to a learner with an intellectual disability while they do
+"{title}". You talk with them like a real person: you listen, answer, and gently lead them to the next small action.
+Done so far: {done}.
+What they can do next: {avail}.
+The step you are focusing on: "{text}" (finished when: {done_state}).
+The learner just said: "{said}"
+The image (if any) is what the camera sees right now.
+Reply in at most 18 simple words, ONE idea. Rules:
+- If it is a question, answer it using what you can see (colors, left/right from THEIR side) and this step.
+- If they tell you they did something or are about to, acknowledge it specifically and say the next small action.
+- If they ask to skip or to do something unsafe, kindly say no and suggest asking the teacher.
+- If they sound stuck or upset, slow down: one tiny action, and tell them they are doing fine.
+- Never give medical advice. Never say "wrong".
+- If they say they finished this step, or ask to move on ("done", "can we continue", "it's flat"), and nothing you
+  can see contradicts it, set "claims_done": true and make "say" a short, specific acknowledgement plus the next
+  small action. If the picture clearly shows it is NOT done, "claims_done": false and say kindly what is still left.
+Return ONLY JSON: {{"say": "...", "claims_done": true|false}}
+""" + VOICE
 
 
-def answer(frame: bytes | None, title: str, steps: list[dict], i: int, q: str) -> dict:
-    return _ask(SPARK, ANSWER.format(title=title, n=i + 1, total=len(steps), text=steps[i]["text"], q=q),
+def answer(frame: bytes | None, title: str, steps: list[dict], i: int, q: str, done: set[int] = frozenset(), lang: str = "en") -> dict:
+    avail = available(steps, set(done))
+    return _ask(SPARK, lang_note(lang) + ANSWER.format(title=title, text=steps[i]["text"], done_state=steps[i].get("done_state", ""), said=q,
+                                     done="; ".join(steps[k]["text"] for k in sorted(done)) or "nothing yet",
+                                     avail="; ".join(steps[k]["text"] for k in avail) or "none"),
                 [frame] if frame else [], effort="minimal", max_out=800)
 
 

@@ -77,11 +77,21 @@ h2 { font-size:19px; font-weight:800; margin:0; }
 .agnew { margin-top:6px; padding:10px 12px; border-radius:12px; background:var(--p5); font-size:15px; }
 .aghl { display:flex; gap:10px; align-items:center; padding:10px 0; border-top:1px solid var(--line); } .aghl:first-child { border-top:0; }
 .aglog { display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-top:1px solid var(--line); } .aglog:first-child { border-top:0; }
+.mic { position:relative; overflow:hidden; }
+.mic .lvl { position:absolute; left:0; bottom:0; height:6px; width:100%; background:rgba(255,255,255,.7); transform-origin:left; transform:scaleX(0); transition:transform .08s linear; }
+.typebar { display:flex; gap:8px; margin-top:12px; }
+.typebar input { flex:1; min-height:52px; border-radius:16px; border:1.5px solid var(--p4); padding:0 14px; font-size:18px; background:#fff; }
+.typebar button { min-width:72px; border-radius:16px; background:var(--p); color:#fff; font-size:17px; font-weight:800; }
 .coachbub { display:flex; gap:12px; align-items:flex-start; margin-top:18px; }
 .coachbub .av { flex:none; width:52px; height:52px; border-radius:50%; background:var(--p); display:grid; place-items:center; }
 .coachbub .bub { flex:1; padding:16px 18px; border-radius:6px 22px 22px 22px; background:#fff; box-shadow:var(--shadow); font-size:23px; font-weight:700; line-height:1.35; }
 .mic.big { width:100%; margin-top:22px; min-height:120px; font-size:24px; }
 .taskcard.slim { display:flex; justify-content:space-between; align-items:center; padding:18px 20px; min-height:0; }
+.cam .ov { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.cam .ov .pulse { animation:ovp 1.6s ease-in-out infinite; transform-origin:center; transform-box:fill-box; }
+@keyframes ovp { 0%,100% { transform:scale(1); opacity:.95 } 50% { transform:scale(1.12); opacity:.6 } }
+.cam .ov .dash { stroke-dasharray:6 5; animation:ovd 1.2s linear infinite; }
+@keyframes ovd { to { stroke-dashoffset:-22 } }
 .cam .flip { position:absolute; right:12px; top:12px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.92); font-size:13px; font-weight:700; color:var(--p); }
 .cam .seeing { position:absolute; left:12px; right:12px; bottom:12px; padding:10px 14px; border-radius:14px; background:rgba(34,48,45,.78); color:#fff; font-size:17px; font-weight:700; line-height:1.3; }
 .stopnow { margin-top:14px; padding:22px; border-radius:22px; background:#B83A2A; color:#fff; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
@@ -228,26 +238,43 @@ function myVoice() {
   const vs = voices(); return vs.find(v => v.name === pick) || vs[0] || null;
 }
 function hush() { try { speechSynthesis.cancel(); } catch (e) {} if (AUD) { AUD.pause(); AUD = null; } }
-function say(text, rate) {
-  if (!text) return;
+// 服务器上的 Kokoro 声音（更自然）；没装或出错时退回手机自带声音
+let TTS_OK = false, TTS_SEQ = 0;
+api('/api/tts/status').then(r => { TTS_OK = !!r.ok; }).catch(() => {});
+function say(text, rate, onend) {
+  if (!text) { onend?.(); return; }
+  if (TTS_OK && !window.FORCE_LOCAL_VOICE) {
+    hush();
+    const seq = ++TTS_SEQ, sp = rate ? Math.min(1.1, Math.max(0.7, rate)) : (SLOW ? 0.75 : 0.95);
+    const a = new Audio(api.url(`/api/tts?text=${encodeURIComponent(text)}&speed=${sp}&lang=${LANG}`));
+    AUD = a;
+    if (onend) a.onended = onend;
+    a.onerror = () => { if (seq === TTS_SEQ) { TTS_OK = false; sayLocal(text, rate, onend); } };
+    a.play().catch(() => { if (seq === TTS_SEQ) sayLocal(text, rate, onend); });
+    return;
+  }
+  sayLocal(text, rate, onend);
+}
+function sayLocal(text, rate, onend) {
   try {
     hush();
     const u = new SpeechSynthesisUtterance(text);
-    const v = myVoice(); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
-    u.rate = rate || (SLOW ? 0.7 : 0.95); u.pitch = 1.0;
+    if (LANG === 'zh') u.lang = 'zh-CN'; else { const v = myVoice(); if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US'; }
+    u.rate = rate || (SLOW ? 0.7 : 0.92); u.pitch = 1.03;
+    if (onend) u.onend = onend;
     speechSynthesis.speak(u);
-  } catch (e) {}
+  } catch (e) { onend?.(); }
 }
 // 读一步：老师录过这一步就放老师的声音
 function sayStep(t, i, extra) {
   const s = t.steps[i];
-  if (s.voice) {
+  if (s.voice && LANG === 'en') {
     hush(); AUD = new Audio(api.url(`/api/tasks/${t.id}/voice/${s.voice}`)); AUD.playbackRate = SLOW ? 0.8 : 1;
     AUD.play().catch(() => say(s.text + (extra ? '. ' + extra : '')));
     if (extra) AUD.onended = () => say(extra);
     return;
   }
-  say(s.text + (extra ? '. ' + extra : ''));
+  say((T === t ? stepText(i) : s.text) + (extra ? '. ' + extra : ''));
 }
 
 async function learnHome() {
@@ -262,42 +289,172 @@ async function learnHome() {
   let tasks = [];
   try { tasks = (await api('/api/tasks?student=' + ME)).filter(t => t.approved); } catch (e) {}
   TASKS = tasks;
-  renderHome(`Hi ${nameOf(ME)}! What do you want to do today?`);
-  say(`Hi ${nameOf(ME)}! What do you want to do today?`);
+  const greet = S.greet(nameOf(ME));
+  if (!AUDIO_OK) {   // 手机浏览器要先点一下才能出声：先放一个大的开始按钮
+    $('#lhome').innerHTML = `<div class="yay"><h1>Hi ${esc(nameOf(ME))}!</h1></div>
+      <button class="cta" style="min-height:120px;font-size:28px;width:100%" onclick="startAudio(${esc(JSON.stringify(greet))})">${S.tap()}</button>
+      <p class="disc">${S.sound()}</p>
+      ${SHOW_LANG ? `<div class="row" style="justify-content:center;gap:8px;margin-top:14px"><button class="pill" style="${LANG === 'en' ? 'background:var(--p);color:#fff' : ''}" onclick="setLang('en')">English</button><button class="pill" style="${LANG === 'zh' ? 'background:var(--p);color:#fff' : ''}" onclick="setLang('zh')">中文</button></div>` : ''}`;
+    return;
+  }
+  renderHome(greet);
+  say(greet);
+}
+let AUDIO_OK = false;
+// 学生端语言：en / zh。AI 说的话、步骤朗读、固定句子都跟着变。
+// 中文暂不开放（Meta 语音识别只认英文）：开关隐藏，默认英文。要开就把 SHOW_LANG 改成 true。
+const SHOW_LANG = false;
+let LANG = 'en'; try { LANG = SHOW_LANG ? (localStorage.getItem('lang') || 'en') : 'en'; } catch (e) {}
+function setLang(l) { LANG = l; try { localStorage.setItem('lang', l); } catch (e) {} learnHome(); }
+const S = {   // 固定句子
+  greet: n => LANG === 'zh' ? `你好，${n}！今天想做点什么呀？` : `Hi ${n}! What do you want to do today?`,
+  tap: () => LANG === 'zh' ? '点一下开始' : 'Tap to start',
+  sound: () => LANG === 'zh' ? '请把声音打开。' : 'Turn the sound on.',
+  tell: () => LANG === 'zh' ? '按一下，告诉我' : 'Tap and tell me',
+  listening: () => LANG === 'zh' ? '我在听，你说吧' : 'Listening… just talk',
+  thinking: () => LANG === 'zh' ? '我想一想…' : 'Thinking…',
+  type: () => LANG === 'zh' ? '或者在这里打字' : 'Or type it here',
+  pick: () => LANG === 'zh' ? '或者选一个' : 'Or pick one',
+  steps: n => LANG === 'zh' ? `${n} 步` : `${n} steps`,
+  noCatch: () => LANG === 'zh' ? '不好意思，我没听清。再说一遍，或者打字。' : "Sorry, I didn't catch that. Try again, or type it.",
+  noCatchSay: () => LANG === 'zh' ? '不好意思，我没听清，可以再说一遍吗？' : "Sorry, I didn't catch that. Can you say it again?",
+  youSaid: t => LANG === 'zh' ? `你说：“${t}”` : `You said: “${t}”`,
+  ear: () => LANG === 'zh' ? '我在听…' : 'I am listening…',
+  think: () => LANG === 'zh' ? '让我想想…' : 'Let me think…',
+  setup: title => LANG === 'zh' ? `我们来${title}吧！把手机垫高一点、稍微朝下，让我看到整张桌子。` : `Let's ${title.toLowerCase()}! Prop the phone up a little, tilted down, so I can see the whole table.`,
+  start: () => LANG === 'zh' ? '开始吧' : "Let's start",
+  done: (a, b) => LANG === 'zh' ? `完成 ${a} / ${b}` : `${a} of ${b} done`,
+  orYou: () => LANG === 'zh' ? '也可以：' : 'Or you can: ',
+  stop: () => LANG === 'zh' ? '停下来，先放下。等老师过来。' : 'Stop. Put it down. Wait for your teacher.',
+  stopB: () => LANG === 'zh' ? '停下来，先放下。' : 'Stop. Put it down.',
+  stopS: () => LANG === 'zh' ? '等老师过来。' : 'Wait for your teacher.',
+  careful: () => LANG === 'zh' ? '小心一点，老师最好在旁边。' : 'Careful. Your teacher should be close by.',
+  showMe: () => LANG === 'zh' ? '给我看看' : 'Show me', again: () => LANG === 'zh' ? '再来一次' : 'Again',
+  ask: () => LANG === 'zh' ? '问一下' : 'Ask', help: () => LANG === 'zh' ? '找老师' : 'Help', coming: () => LANG === 'zh' ? '老师来了' : 'Teacher is coming',
+  typeQ: () => LANG === 'zh' ? '打字问问题' : 'Type a question',
+  hold: () => LANG === 'zh' ? '老师：这一步做完了，按住 2 秒' : 'Teacher: hold 2 seconds when this step is done',
+  noCam: () => LANG === 'zh' ? '摄像头没开，由老师来确认每一步。' : 'The camera is off, so your teacher checks each step.',
+  helpSay: () => LANG === 'zh' ? '好的，老师马上来。' : 'Okay. Your teacher is coming.',
+  askFail: () => LANG === 'zh' ? '好问题，我们问问老师。' : "Good question. Let's ask your teacher.",
+  holdStill: () => LANG === 'zh' ? ' — 先别动…' : ' — hold still…',
+  wait: h => LANG === 'zh' ? `等一下。${h}` : `Wait. ${h}`, waitFirst: t => LANG === 'zh' ? `等一下，先做：${t}` : `Wait. First: ${t}`,
+  tryAgain: () => LANG === 'zh' ? '我们再试一次这一步。' : "Let's try this part again.",
+  moveBack: () => LANG === 'zh' ? '把手机往后挪一点，让我看到整张桌子。' : 'Move the phone back a little, so I can see the whole table.',
+  praiseT: i => (LANG === 'zh' ? ['谢谢老师，我们继续。', '好，这一步完成了。'] : ['Thank you. Let\'s keep going.', 'Okay, that one\'s done.'])[i % 2],
+  praise: i => (LANG === 'zh' ? ['做得好。', '就是这样。', '很棒。', '对了。'] : ['Nice work.', 'You got it.', 'That\'s it.', 'Lovely.'])[i % 4],
+  lead: i => (LANG === 'zh' ? ['现在我们来', '接下来，', '好，现在'] : ['Now let\'s', 'Next, let\'s', 'Okay, now let\'s'])[i % 3],
+  next: c => LANG === 'zh' ? `下一步：${c}` : `Next: ${c}`, oneMore: () => LANG === 'zh' ? '还剩最后一步。' : 'One more to go.', whatNext: () => LANG === 'zh' ? '接下来做什么？' : 'What comes next?',
+  finish: (p, n) => LANG === 'zh' ? `${p ? p.replace(/[。.!！]?$/, '。') : ''}你做到了${n ? '，' + n : ''}！每一步都完成了。` : `${p ? p.replace(/[.!]?$/, '.') + ' ' : ''}You did it${n ? ', ' + n : ''}! Every step, done.`,
+  didIt: () => LANG === 'zh' ? '你做到了！' : 'You did it!', finishB: () => LANG === 'zh' ? '完成' : 'Finish',
+};
+// 步骤文字：中文模式用翻译好的
+const stepText = i => (SESS?.texts?.[i]?.text) || T.steps[i].text;
+const stepCue = i => (SESS?.texts?.[i]?.cue) || T.steps[i].cue || T.steps[i].text;
+function startAudio(greet) {
+  AUDIO_OK = true;
+  say(greet);   // 在点击事件里播放，手机才允许出声
+  pcmStart();   // 顺便把麦克风打开，之后按下就立刻开始录（iPhone 要在点击里创建音频）
+  renderHome(greet);
 }
 let TASKS = [];
 function renderHome(bubble, busy) {
   $('#lhome').innerHTML = `
     <div class="coachbub"><div class="av">${I.hand('#fff')}</div><div class="bub">${esc(bubble)}</div></div>
-    <button class="mic big ${REC ? 'rec' : ''}" onclick="talk()" ${busy ? 'disabled' : ''}>${I.mic(REC ? '#fff' : '#3F9E8F')}${REC ? 'Listening… tap when done' : busy ? 'Thinking…' : 'Tap and tell me'}</button>
-    ${TASKS.length ? `<div class="sub" style="margin:22px 4px 8px;font-size:16px">Or pick one</div>
-    <div class="stack">${TASKS.map(t => `<button class="taskcard slim" onclick="coachStart('${t.id}')"><b>${esc(t.title)}</b><span class="sub" style="font-size:15px">${t.n_steps} steps</span></button>`).join('')}</div>` : ''}
+    <button class="mic big ${REC ? 'rec' : ''}" onclick="talk()" ${busy ? 'disabled' : ''}>${I.mic(REC ? '#fff' : '#3F9E8F')}${REC ? S.listening() : busy ? S.thinking() : S.tell()}${REC ? '<i class="lvl" id="lvl"></i>' : ''}</button>
+    <div class="typebar"><input id="sayIn" placeholder="${S.type()}" ${busy ? 'disabled' : ''} onkeydown="if(event.key==='Enter')typed()" aria-label="Type what you want to do"><button onclick="typed()" ${busy ? 'disabled' : ''}>Go</button></div>
+    ${TASKS.length ? `<div class="sub" style="margin:22px 4px 8px;font-size:16px">${S.pick()}</div>
+    <div class="stack">${TASKS.map(t => `<button class="taskcard slim" onclick="coachStart('${t.id}')"><b>${esc(t.title)}</b><span class="sub" style="font-size:15px">${S.steps(t.n_steps)}</span></button>`).join('')}</div>` : ''}
     <p class="disc"><a href="#" onclick="pickMe(null);return false" style="color:var(--sub)">Not ${esc(nameOf(ME))}?</a> · <a href="#care" style="color:var(--sub)">Teacher view</a></p>`;
 }
-// 按一下说话，再按一下停；转成文字后交给后端去找老师批准过的任务
+// 说话：麦克风常开，原始音频进一个 0.6 秒的环形缓冲，所以触发录音时开头不会丢。
+// listen() = 从缓冲开始录，说完停顿 1.3 秒自动结束（也可以再按一下结束），转成 16k WAV 送去识别。
+let MIC = null, PCM = null;
+async function openMic() {
+  if (MIC && MIC.active) return MIC;
+  try { MIC = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); } catch (e) { MIC = null; }
+  return MIC;
+}
+async function pcmStart() {
+  if (PCM) { try { await PCM.ctx.resume(); } catch (e) {} return PCM; }
+  const stream = await openMic(); if (!stream) return null;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(2048, 1, 1), mute = ctx.createGain(); mute.gain.value = 0;
+    src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
+    PCM = { ctx, proc, ring: [], ringLen: 0, rec: false, chunks: [], rms: 0 };
+    proc.onaudioprocess = e => {
+      const d = e.inputBuffer.getChannelData(0), c = new Float32Array(d); let t = 0; for (let i = 0; i < c.length; i++) t += c[i] * c[i];
+      PCM.rms = Math.sqrt(t / c.length);
+      if (PCM.rec) PCM.chunks.push(c);
+      else { PCM.ring.push(c); PCM.ringLen += c.length; while (PCM.ringLen > ctx.sampleRate * 0.6) PCM.ringLen -= PCM.ring.shift().length; }
+    };
+    await ctx.resume();
+  } catch (e) { PCM = null; }
+  return PCM;
+}
+function wavFrom(chunks, sr) {   // Float32 → 16k 单声道 16-bit WAV
+  let n = 0; chunks.forEach(c => n += c.length); const all = new Float32Array(n); let o = 0; chunks.forEach(c => { all.set(c, o); o += c.length; });
+  const ratio = sr / 16000, m = Math.floor(n / ratio), out = new Int16Array(m);
+  for (let i = 0; i < m; i++) { const a = Math.floor(i * ratio), b2 = Math.min(n, Math.floor((i + 1) * ratio)); let v = 0; for (let k = a; k < b2; k++) v += all[k]; v /= Math.max(1, b2 - a); out[i] = Math.max(-1, Math.min(1, v)) * 32767; }
+  const buf = new ArrayBuffer(44 + out.length * 2), dv = new DataView(buf), W = (p2, str) => { for (let i = 0; i < str.length; i++) dv.setUint8(p2 + i, str.charCodeAt(i)); };
+  W(0, 'RIFF'); dv.setUint32(4, 36 + out.length * 2, true); W(8, 'WAVE'); W(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); W(36, 'data'); dv.setUint32(40, out.length * 2, true);
+  new Int16Array(buf, 44).set(out);
+  return new Blob([buf], { type: 'audio/wav' });
+}
 async function listen(onText, onState) {
   if (REC) { REC.stop(); return; }
-  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { onText(null); return; }
+  // 中文：Meta 的识别只认英文，用手机自带的识别（iPhone 是 Siri 的）；没有就只能打字
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (LANG === 'zh' && SR) {
+    hush();
+    const r = new SR(); r.lang = 'zh-CN'; r.interimResults = false; r.maxAlternatives = 1; r.continuous = false;
+    let got = false;
+    r.onresult = e => { got = true; onText((e.results[0]?.[0]?.transcript || '').trim() || null); };
+    r.onerror = () => { if (!got) { got = true; onText(null); } };
+    r.onend = () => { REC = null; if (!got) { got = true; onText(null); } };
+    REC = { stop: () => { try { r.stop(); } catch (e) {} } };
+    try { r.start(); onState?.('rec'); } catch (e) { REC = null; onText(null); }
+    return;
+  }
+  const p = await pcmStart();
+  if (!p) { onText(null); return; }
   hush();
-  const chunks = [], r = REC = new MediaRecorder(stream);
-  r.ondataavailable = e => chunks.push(e.data);
-  r.onstop = async () => {
-    stream.getTracks().forEach(t => t.stop()); const type = r.mimeType; REC = null; onState?.('busy');
-    const fd = new FormData(); fd.append('audio', new Blob(chunks, { type }), type.includes('mp4') ? 'a.mp4' : 'a.webm');
-    try { onText((await api('/api/transcribe', { body: fd })).text.replace(/\.+$/, '')); } catch (e) { onText(null); }
+  p.chunks = [...p.ring]; p.rec = true;
+  let spoke = false, quietSince = 0; const t0 = Date.now();
+  const stop = async () => {
+    if (!p.rec) return; p.rec = false; clearInterval(id); REC = null; onState?.('busy');
+    const chunks = p.chunks; p.chunks = [];
+    let n = 0; chunks.forEach(c => n += c.length);
+    if (!spoke || n / p.ctx.sampleRate < 0.6) { onText(null); return; }
+    const fd = new FormData(); fd.append('audio', wavFrom(chunks, p.ctx.sampleRate), 'a.wav');
+    try { onText((await api('/api/transcribe', { body: fd })).text.replace(/\.+$/, '').trim() || null); } catch (e) { onText(null); }
   };
-  r.start(); onState?.('rec');
-  setTimeout(() => { if (REC === r) r.stop(); }, 8000);
+  REC = { stop }; onState?.('rec');
+  const id = setInterval(() => {
+    const el = $('#lvl'); if (el) el.style.transform = `scaleX(${Math.min(1, p.rms * 12)})`;
+    const now = Date.now();
+    if (p.rms > 0.02) { spoke = true; quietSince = 0; }
+    else if (spoke) { if (!quietSince) quietSince = now; else if (now - quietSince > 1300) stop(); }
+    else if (now - t0 > 6000) stop();
+    if (now - t0 > 12000) stop();
+  }, 80);
 }
+function typed() { const v = ($('#sayIn')?.value || '').trim(); if (v) handleSaid(v); }
 function talk() {
-  listen(async said => {
-    if (!said) { renderHome("Sorry, I didn't hear that. Try again, or pick one below."); say("Sorry, I didn't hear that."); return; }
-    renderHome(`You said: “${said}”`, true);
-    let r; try { r = await api('/api/intent', { json: { student: ME, said } }); } catch (e) { r = { task_id: null, say: 'Something went wrong. Try again.' }; }
+  listen(said => {
+    if (!said) { renderHome(S.noCatch()); say(S.noCatchSay()); return; }
+    handleSaid(said);
+  }, st => renderHome(st === 'rec' ? S.ear() : S.think(), st === 'busy'));
+}
+async function handleSaid(said) {
+  {
+    renderHome(S.youSaid(said), true);
+    let r; try { r = await api('/api/intent', { json: { student: ME, said, lang: LANG } }); } catch (e) { r = { task_id: null, say: 'Something went wrong. Try again.' }; }
     say(r.say);
     if (r.task_id) { renderHome(r.say, true); await wait(1800); coachStart(r.task_id); }
     else renderHome(r.say);
-  }, st => renderHome(st === 'rec' ? 'I am listening…' : 'Let me think…', st === 'busy'));
+  }
 }
 async function coachStart(id) { T = await api(`/api/tasks/${id}`); practice(); }
 function pickMe(id) { ME = id; try { id ? localStorage.setItem('student', id) : localStorage.removeItem('student'); } catch (e) {} learnHome(); }
@@ -322,21 +479,9 @@ function renderAsk(msg) {
     </div>
     <div class="dock"><button class="cta" onclick="sendAsk()" ${ASK.text.trim() ? '' : 'disabled'}>Ask my teacher</button></div>`;
 }
-async function toggleRec() {
-  if (REC) { REC.stop(); return; }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const chunks = []; REC = new MediaRecorder(stream);
-    REC.ondataavailable = e => chunks.push(e.data);
-    REC.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop()); const type = REC.mimeType; REC = null;
-      renderAsk('Listening back…');
-      const fd = new FormData(); fd.append('audio', new Blob(chunks, { type }), type.includes('mp4') ? 'a.mp4' : 'a.webm');
-      try { ASK.text = (await api('/api/transcribe', { body: fd })).text.replace(/\.+$/, ''); renderAsk(); }
-      catch (e) { renderAsk('I could not hear that. Try again or type it.'); }
-    };
-    REC.start(); renderAsk();
-  } catch (e) { renderAsk('The microphone is not available. You can type instead.'); }
+function toggleRec() {   // 旧的"我想学…"页：同一套录音
+  listen(t => { if (t) { ASK.text = t; renderAsk(); } else renderAsk('I could not hear that. Try again or type it.'); },
+         st => renderAsk(st === 'busy' ? 'Listening back…' : undefined));
 }
 async function sendAsk() {
   const fd = new FormData(); fd.append('goal', ASK.text.trim()); if (ASK.photo) fd.append('photo', ASK.photo);
@@ -400,13 +545,13 @@ function stopCam() { RUN = false; STREAM?.getTracks().forEach(t => t.stop()); ST
 async function practice() {
   MODE = 'practice'; IDX = 0; show('lpractice');
   $('#lpractice').innerHTML = loading('Getting ready…');
-  try { SESS = await api(`/api/tasks/${T.id}/sessions`, { json: { student: ME } }); } catch (e) { $('#lpractice').innerHTML = loading('Could not start', esc(e.message)); return; }
-  await openCam();
+  try { SESS = await api(`/api/tasks/${T.id}/sessions`, { json: { student: ME, lang: LANG } }); } catch (e) { $('#lpractice').innerHTML = loading('Could not start', esc(e.message)); return; }
+  await openCam(); pcmStart();
   RUN = true;
   if (STREAM) await readyPhase();
   if (!RUN) return;
   beginStep();
-  judgeLoop(); confirmLoop();
+  judgeLoop(); confirmLoop(); earLoop();
 }
 // 开始前：看看桌上要用的东西齐不齐（最多看 5 次，或学生点"Let's start"）
 let GO = false;
@@ -418,21 +563,22 @@ async function readyPhase() {
       <div class="coachbub" style="margin-top:14px"><div class="av">${I.hand('#fff')}</div><div class="bub">${esc(msg)}</div></div>
       <div class="cam"><video id="pv" playsinline muted autoplay style="${CAM === 'user' ? 'transform:scaleX(-1)' : ''}"></video>
         <button class="flip" onclick="flipCam().then(()=>paintReady())">${CAM === 'user' ? 'Front camera' : 'Back camera'} ⇄</button></div>
-      <div class="dock"><button class="cta" onclick="GO=true">Let's start</button></div>`;
+      <div class="dock"><button class="cta" onclick="GO=true">${S.start()}</button></div>`;
     const v = $('#pv'); v.srcObject = STREAM; v.play().catch(() => {});
   };
   window.paintReady = () => paint(LAST);
-  let LAST = `Let's ${T.title.toLowerCase()}! Put the phone where I can see your hands and the table.`;
+  let LAST = S.setup(SESS?.title_l || T.title);
   paint(LAST); say(LAST);
   await wait(3500);
-  for (let k = 0; k < 5 && RUN && !GO; k++) {
+  // 先把画面调好（太近/太远/没对着桌子），再看东西齐不齐；每次说完给学生 5 秒调整，最多 8 轮
+  for (let k = 0; k < 8 && RUN && !GO; k++) {
     const b = await grab(); if (!b) { await wait(800); continue; }
-    const fd = new FormData(); fd.append('frames', b, 'f.jpg');
+    const fd = new FormData(); fd.append('frames', b, 'f.jpg'); fd.append('lang', LANG);
     let r; try { r = await api(`/api/tasks/${T.id}/ready`, { body: fd }); } catch (e) { break; }
     if (!RUN || GO) break;
     if (r.say && r.say !== LAST) { LAST = r.say; paint(LAST); say(LAST); }
-    if (!(r.missing || []).length) { await wait(2500); break; }
-    for (let w = 0; w < 12 && !GO; w++) await wait(500);
+    if (r.view_ok && !(r.missing || []).length) { await wait(2500); break; }
+    for (let w = 0; w < 10 && !GO; w++) await wait(500);
   }
 }
 // 摄像头：默认前置（手机立在面前、对着学生，双手都能用来做）；可以切到后置
@@ -451,10 +597,12 @@ let DONE = new Set(), STS = {};
 const FLEX = () => (T.order || 'flex') === 'flex';
 const needsOf = i => T.steps[i].needs ?? (i ? [i - 1] : []);
 const availSteps = () => T.steps.map((_, i) => i).filter(i => !DONE.has(i) && (FLEX() ? needsOf(i).every(j => DONE.has(j)) : i === Math.min(...T.steps.map((_, k) => k).filter(k => !DONE.has(k)))));
+function warm(text) { if (TTS_OK && text) fetch(api.url(`/api/tts?text=${encodeURIComponent(text)}&speed=0.95&lang=${LANG}`), { headers: { 'x-k': K } }).catch(() => {}); }
 function focusStep(i, speak) {
   IDX = i;
+  availSteps().filter(k => k !== i).slice(0, 2).forEach(k => warm(T.steps[k].text.replace(/\.$/, '')));
   ST = STS[i] = STS[i] || { t0: Date.now(), errors: 0, prompted: false, help: false, done: 0, unclear: 0, shown: SESS.levels[i], hint: '', seeing: '',
-         status: '', finishing: false, spokeAt: Date.now(), spoken: '', stop: false, lastBad: '' };
+         status: '', finishing: false, spokeAt: Date.now(), spoken: '', stop: false, lastBad: '', saidHint: false, nWorking: 0, idleSince: 0, nudged: false };
   ST.finishing = false; ST.done = 0;
   renderPractice(speak);
 }
@@ -465,33 +613,56 @@ const STAT = { done: ['#3F9E8F', 'Looks done…'], working: ['#3F9E8F', 'Watchin
 function renderPractice(speak) {
   const s = T.steps[IDX], lv = ST.shown;
   let prompt = '';
-  if (lv >= 2 && !hasPic(T, IDX)) prompt = `<div class="steptext" style="font-size:30px;margin-top:6px">${esc(s.text)}</div>`;
-  else if (lv === 3) prompt = `${anim(T, IDX)}<div class="steptext" style="font-size:26px;margin-top:14px">${esc(s.text)}</div>`;
-  else if (lv === 2) prompt = `<div class="stepimg" style="width:62%;margin:0 auto"><img src="${cardUrl(T, IDX)}" alt=""></div><div class="steptext" style="font-size:26px;margin-top:14px">${esc(s.text)}</div>`;
-  else if (lv === 1) prompt = `<div class="cue">${esc(s.cue || s.text)}</div>`;
-  else prompt = `<div class="cue" style="font-size:40px;color:var(--p2)">${DONE.size} of ${T.steps.length} done</div>`;
+  if (lv >= 2 && !hasPic(T, IDX)) prompt = `<div class="steptext" style="font-size:30px;margin-top:6px">${esc(stepText(IDX))}</div>`;
+  else if (lv === 3) prompt = `${anim(T, IDX)}<div class="steptext" style="font-size:26px;margin-top:14px">${esc(stepText(IDX))}</div>`;
+  else if (lv === 2) prompt = `<div class="stepimg" style="width:62%;margin:0 auto"><img src="${cardUrl(T, IDX)}" alt=""></div><div class="steptext" style="font-size:26px;margin-top:14px">${esc(stepText(IDX))}</div>`;
+  else if (lv === 1) prompt = `<div class="cue">${esc(stepCue(IDX))}</div>`;
+  else prompt = `<div class="cue" style="font-size:40px;color:var(--p2)">${S.done(DONE.size, T.steps.length)}</div>`;
   const other = FLEX() ? availSteps().filter(i => i !== IDX) : [];
-  if (other.length && lv >= 1) prompt += `<div class="sub" style="text-align:center;font-size:16px;margin-top:6px">Or you can: ${other.map(i => esc(T.steps[i].cue || T.steps[i].text)).join(' · ')}</div>`;
+  if (other.length && lv >= 1) prompt += `<div class="sub" style="text-align:center;font-size:16px;margin-top:6px">${S.orYou()}${other.map(i => esc(stepCue(i))).join(' · ')}</div>`;
   const needT = ST.help || ST.stop || !STREAM;
   $('#lpractice').innerHTML = `
     <div class="top"><button class="icon-btn" onclick="quitPractice()" aria-label="Stop">${I.back}</button>${stepDots()}<span style="width:44px"></span></div>
-    ${ST.stop ? `<div class="stopnow">${I.warn('#fff')}<b>Stop. Put it down.</b><span>Wait for your teacher.</span></div>` : `<div style="margin-top:12px">${prompt}</div>`}
-    ${(s.hazards || []).length && lv >= 1 && !ST.stop ? `<div class="safety">${I.warn('#B83A2A')}${esc(s.safety || 'Careful. Your teacher should be close by.')}</div>` : ''}
+    ${ST.stop ? `<div class="stopnow">${I.warn('#fff')}<b>${S.stopB()}</b><span>${S.stopS()}</span></div>` : `<div style="margin-top:12px">${prompt}</div>`}
+    ${(s.hazards || []).length && lv >= 1 && !ST.stop ? `<div class="safety">${I.warn('#B83A2A')}${esc(LANG === 'zh' ? S.careful() : (s.safety || S.careful()))}</div>` : ''}
     <div class="gentle" id="hint" style="${ST.hint ? '' : 'display:none'}">${esc(ST.hint)}</div>
     <div class="cam"><video id="pv" playsinline muted autoplay style="${CAM === 'user' ? 'transform:scaleX(-1)' : ''}"></video>
       ${navigator.mediaDevices ? `<button class="flip" onclick="flipCam()" aria-label="Switch camera">${CAM === 'user' ? 'Front camera' : 'Back camera'} ⇄</button>` : ''}
       <div class="look" id="look"><i></i>${STREAM ? 'Watching' : 'No camera'}</div>
+      <svg class="ov" id="ov" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
       <div class="seeing" id="seeing" style="${ST.seeing ? '' : 'display:none'}">${esc(ST.seeing)}</div>
       <div class="mark" id="mark"><span>${I.check('#fff', 72)}</span></div></div>
     <div class="mini">
-      ${lv < 3 ? `<button onclick="showMe()">Show me</button>` : `<button onclick="renderPractice(true)">Again</button>`}
-      <button id="askBtn" onclick="askCoach()">${I.mic('#3F9E8F')} Ask</button>
-      <button onclick="getHelp()" ${ST.help ? 'disabled' : ''}>${I.hand('#3F9E8F')} ${ST.help ? 'Teacher is coming' : 'Help'}</button>
+      ${lv < 3 ? `<button onclick="showMe()">${S.showMe()}</button>` : `<button onclick="renderPractice(true)">${S.again()}</button>`}
+      <button id="askBtn" onclick="askCoach()" title="Or just talk — I'm listening">${I.mic('#3F9E8F')} ${S.ask()}</button>
+      <button onclick="getHelp()" ${ST.help ? 'disabled' : ''}>${I.hand('#3F9E8F')} ${ST.help ? S.coming() : S.help()}</button>
     </div>
-    ${needT ? `<button class="hold" id="hold" onpointerdown="holdStart(event)" onpointerup="holdEnd()" onpointerleave="holdEnd()"><i></i><span>Teacher: hold 2 seconds when this step is done</span></button>` : ''}
-    ${!STREAM ? `<p class="disc">The camera is off, so your teacher checks each step.</p>` : ''}`;
+    <div class="typebar"><input id="askIn" placeholder="${S.typeQ()}" onkeydown="if(event.key==='Enter')askTyped()" aria-label="Type a question"><button onclick="askTyped()">Ask</button></div>
+    ${needT ? `<button class="hold" id="hold" onpointerdown="holdStart(event)" onpointerup="holdEnd()" onpointerleave="holdEnd()"><i></i><span>${S.hold()}</span></button>` : ''}
+    ${!STREAM ? `<p class="disc">${S.noCam()}</p>` : ''}`;
   if (STREAM) { const v = $('#pv'); v.srcObject = STREAM; v.play().catch(() => {}); }
-  if (speak && !ST.stop) { ST.spokeAt = Date.now(); lv >= 2 ? sayStep(T, IDX) : say(lv === 1 ? (s.cue || s.text) : ''); }
+  if (speak && !ST.stop) { ST.spokeAt = Date.now(); lv >= 2 ? sayStep(T, IDX) : say(lv === 1 ? stepCue(IDX) : ''); }
+}
+// 镜头上的标注：圈住要动的东西，箭头指向它该去的地方（前置镜头画面是镜像的，x 要翻转）
+let MARK_T = 0;
+function drawMark(m) {
+  const ov = $('#ov'); if (!ov) return;
+  if (!m) { if (Date.now() - MARK_T > 4000) ov.innerHTML = ''; return; }
+  MARK_T = Date.now();
+  const fx = x => CAM === 'user' ? 100 - x : x;
+  const x = fx(m.x), y = m.y, hasTo = m.to_x != null;
+  const tx = hasTo ? fx(m.to_x) : null, ty = hasTo ? m.to_y : null;
+  let arrow = '';
+  if (hasTo) {
+    const mx = (x + tx) / 2, my = (y + ty) / 2, dx = tx - x, dy = ty - y, len = Math.hypot(dx, dy) || 1;
+    const cx = mx - dy / len * 10, cy = my + dx / len * 10;   // 微弯
+    const ang = Math.atan2(ty - cy, tx - cx), a1 = ang + 2.6, a2 = ang - 2.6;
+    arrow = `<path d="M${x} ${y} Q${cx} ${cy} ${tx} ${ty}" fill="none" stroke="#3F9E8F" stroke-width="1.6" stroke-linecap="round" vector-effect="non-scaling-stroke" class="dash"/>
+      <path d="M${tx} ${ty} L${tx + Math.cos(a1) * 4} ${ty + Math.sin(a1) * 4} M${tx} ${ty} L${tx + Math.cos(a2) * 4} ${ty + Math.sin(a2) * 4}" stroke="#3F9E8F" stroke-width="1.6" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  }
+  ov.innerHTML = `<circle cx="${x}" cy="${y}" r="9" fill="rgba(63,158,143,.18)" stroke="#3F9E8F" stroke-width="1.4" vector-effect="non-scaling-stroke" class="pulse"/>
+    <circle cx="${x}" cy="${y}" r="1.6" fill="#3F9E8F"/>${arrow}
+    ${m.label ? `<text x="${Math.min(80, Math.max(4, x - 8))}" y="${y > 14 ? y - 12 : y + 15}" font-size="4.2" font-weight="800" fill="#fff" stroke="rgba(34,48,45,.75)" stroke-width="1.2" paint-order="stroke" font-family="system-ui">${esc(m.label)}</text>` : ''}`;
 }
 // 只更新镜头上的字，不重画整页（避免画面闪）
 function paintLive() {
@@ -509,7 +680,7 @@ function coachSay(text, urgent) {
 }
 function showMe() { ST.prompted = true; ST.shown = Math.min(3, ST.shown + 1); renderPractice(true); }
 function getHelp() {
-  ST.help = true; say('Okay. Your teacher is coming.');
+  ST.help = true; say(S.helpSay());
   api(`/api/live/${SESS.session}/help`, { method: 'POST' }).catch(() => {});
   renderPractice(false);
 }
@@ -517,13 +688,19 @@ function getHelp() {
 function askCoach() {
   const b = $('#askBtn');
   listen(async q => {
-    if (!q) { b && (b.innerHTML = `${I.mic('#3F9E8F')} Ask`); return; }
-    ST.hint = `“${q}”`; paintLive();
-    const fd = new FormData(); fd.append('step', IDX); fd.append('q', q); const f = await grab(); if (f) fd.append('frame', f, 'f.jpg');
-    let r; try { r = await api(`/api/tasks/${T.id}/ask`, { body: fd }); } catch (e) { r = { say: "Let's ask your teacher." }; }
-    ST.hint = r.say; ST.spokeAt = Date.now(); ST.spoken = r.say; paintLive(); say(r.say);
+    if (q) await answerQ(q);
     if (b) b.innerHTML = `${I.mic('#3F9E8F')} Ask`;
   }, st => { if (b) b.innerHTML = st === 'rec' ? '● Listening' : 'Thinking…'; });
+}
+async function askTyped() { const el = $('#askIn'), q = (el?.value || '').trim(); if (!q) return; el.value = ''; el.blur(); await answerQ(q); }
+async function answerQ(q) {
+  ST.hint = `“${q}”`; paintLive();
+  const fd = new FormData(); fd.append('step', IDX); fd.append('q', q); fd.append('done', [...DONE].join(',')); fd.append('lang', LANG); const f = await grab(); if (f) fd.append('frame', f, 'f.jpg');
+  let r; try { r = await api(`/api/tasks/${T.id}/ask`, { body: fd }); } catch (e) { r = { say: S.askFail() }; }
+  ST.hint = r.say; ST.spokeAt = Date.now(); ST.spoken = r.say; paintLive();
+  // 学生说做完了、镜头没看出矛盾 → 接受，进入下一步（有危险的步骤除外：必须镜头或老师确认）
+  if (r.claims_done && !(T.steps[IDX].hazards || []).length && !ST.finishing) { ST.verified = 'agreed'; ST.praise = r.say; finishStep(); return; }
+  say(r.say);
 }
 let HOLD = null;
 function holdStart(e) { e.preventDefault(); const b = $('#hold'); b.classList.add('on'); HOLD = setTimeout(() => { HOLD = null; teacherOk(); }, 2000); }
@@ -531,23 +708,28 @@ function holdEnd() { if (HOLD) { clearTimeout(HOLD); HOLD = null; } $('#hold')?.
 function teacherOk() { ST.verified = 'teacher'; finishStep(); }
 function quitPractice() { stopCam(); hush(); api(`/api/tasks/${T.id}/sessions/${SESS.session}/end`, { method: 'POST' }).catch(() => {}); startTask(T.id); }
 
+// 抓的帧 = 屏幕上看到的那一块（视频是 cover 裁切的），这样模型给的坐标能直接画在画面上
 function grab() {
   const v = $('#pv'); if (!v || !v.videoWidth) return null;
-  const k = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight)), c = document.createElement('canvas');
-  c.width = v.videoWidth * k; c.height = v.videoHeight * k; c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+  const box = v.getBoundingClientRect(), ar = box.width && box.height ? box.width / box.height : 4 / 3;
+  let sw = v.videoWidth, sh = v.videoHeight, sx = 0, sy = 0;
+  if (sw / sh > ar) { sw = Math.round(sh * ar); sx = Math.round((v.videoWidth - sw) / 2); } else { sh = Math.round(sw / ar); sy = Math.round((v.videoHeight - sh) / 2); }
+  const k = Math.min(1, 512 / Math.max(sw, sh)), c = document.createElement('canvas');
+  c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+  c.getContext('2d').drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
   return new Promise(r => c.toBlob(r, 'image/jpeg', 0.75));
 }
 // 一直在拍：最近 3 帧（约 0.6 秒一帧）一起送去看，模型能看出“正在做什么”而不只是“做完没有”
 let FR = [];
 async function frameLoop() {
-  while (RUN) { if (STREAM) { const b = await grab(); if (b) { FR.push(b); if (FR.length > 3) FR.shift(); } } await wait(600); }
+  while (RUN) { if (STREAM) { const b = await grab(); if (b) { FR.push(b); if (FR.length > 2) FR.shift(); } } await wait(600); }
 }
 async function judgeLoop() {
   FR = []; frameLoop();
   while (RUN) {
     if (!STREAM || ST.finishing || ST.stop || FR.length < 2) { await wait(400); continue; }
     const fd = new FormData(); fd.append('step', IDX); fd.append('session', SESS.session); fd.append('view', CAM === 'user' ? 'front' : 'back');
-    fd.append('done', [...DONE].join(','));
+    fd.append('done', [...DONE].join(',')); fd.append('lang', LANG);
     FR.forEach((b, k) => fd.append('frames', b, `f${k}.jpg`));
     let j; try { j = await api(`/api/tasks/${T.id}/judge`, { body: fd }); } catch (e) { await wait(1000); continue; }
     if (!RUN || ST.finishing || ST.stop) continue;
@@ -555,30 +737,63 @@ async function judgeLoop() {
     // 灵活顺序：认出学生在做另一个"现在可以做"的步骤 → 跟着切过去（不念步骤，避免打断）
     if (FLEX() && j.step != null && j.step !== IDX && !DONE.has(j.step) && availSteps().includes(j.step)) focusStep(j.step, false);
     ST.status = j.status; ST.seeing = j.seeing || '';
+    drawMark(j.status === 'done' ? null : j.mark);
+    ST.last3 = [...(ST.last3 || []), j.status].slice(-3);
     if (j.status === 'done') {
-      ST.done++; ST.unclear = 0; ST.hint = '';
-      if (ST.done >= 2) { ST.verified = 'camera'; paintLive(); finishStep(); continue; }
-      ST.seeing = (j.seeing || '') + ' — hold still…'; paintLive(); continue;
+      ST.unclear = 0; ST.hint = ''; if (j.praise) ST.praise = j.praise;
+      if (ST.last3.filter(x => x === 'done').length >= 2) { ST.verified = 'camera'; paintLive(); finishStep(); continue; }
+      ST.seeing = (j.seeing || '') + S.holdStill(); paintLive(); continue;
     }
-    ST.done = 0;
+    if (j.status !== 'unclear') ST.last3 = ST.last3.filter(x => x !== 'done');   // 看不清不算否定
     if (j.status === 'unsafe') {   // 危险：停下，叫老师，必须老师确认才能继续
-      ST.stop = true; ST.help = true; ST.hint = ''; renderPractice(false); say('Stop. Put it down. Wait for your teacher.');
+      ST.stop = true; ST.help = true; ST.hint = ''; renderPractice(false); say(S.stop());
       api(`/api/live/${SESS.session}/help`, { method: 'POST' }).catch(() => {}); continue;
     }
     if (j.status === 'too_early') j.status = 'ahead';
     if (j.status === 'wrong' || j.status === 'ahead') {
       if (ST.lastBad !== j.status) ST.errors++;   // 同一次出错只记一次
       ST.lastBad = j.status;
-      ST.hint = j.status === 'ahead' ? (FLEX() && j.hint ? `Wait. ${j.hint}` : `Wait. First: ${T.steps[IDX].text}`) : (j.hint || "Let's try this part again.");
+      ST.hint = j.status === 'ahead' ? (FLEX() && j.hint ? S.wait(j.hint) : S.waitFirst(stepText(IDX))) : (j.hint || S.tryAgain());
       if (ST.shown < 2) { ST.shown = 2; ST.prompted = true; renderPractice(false); }
       paintLive(); coachSay(ST.hint, true); continue;
     }
     ST.lastBad = '';
-    if (j.status === 'unclear') { if (++ST.unclear >= 3) { ST.hint = j.hint || 'Move the phone so I can see your hands.'; coachSay(ST.hint); } }
-    else { ST.unclear = 0; ST.hint = j.hint || ''; if ((Date.now() - ST.t0) > 12000) coachSay(ST.hint); }
+    if (j.status === 'unclear') {   // 看不清：不换提示、不打断；连续 10 秒都看不清才说一次固定的话
+      if (!ST.unclearSince) ST.unclearSince = Date.now();
+      if (++ST.unclear >= 4 && Date.now() - ST.unclearSince > 10000 && !ST.saidUnclear) { ST.saidUnclear = true; ST.hint = j.hint || S.moveBack(); coachSay(ST.hint, true); }
+    } else {
+      ST.unclear = 0; ST.unclearSince = 0; ST.saidUnclear = false; ST.hint = j.hint || '';
+      const el = Date.now() - ST.t0;
+      // 少说话：这一步的提示只说一次（开始 5 秒后）；之后只在停了 20 秒没动时再提醒一次
+      if (j.status === 'working') { ST.nWorking = (ST.nWorking || 0) + 1; ST.idleSince = 0; }
+      else if (j.status === 'idle' || j.status === 'not_started') { if (!ST.idleSince) ST.idleSince = Date.now(); }
+      if (!ST.saidHint && el > 5000) { ST.saidHint = true; coachSay(ST.hint); }
+      else if (ST.idleSince && Date.now() - ST.idleSince > 20000 && !ST.nudged) { ST.nudged = true; coachSay(ST.hint, true); }
+      // 动作类步骤（抚平、整理）没有看得见的结果：无危险、做了 20 秒以上、没出过错 → 算完成
+      if (j.status === 'working' && !(T.steps[IDX].hazards || []).length && ST.nWorking >= 4 && el > 20000 && !ST.errors) {
+        ST.verified = 'camera'; ST.praise = ST.praise || j.praise || ''; paintLive(); finishStep(); continue;
+      }
+    }
     paintLive();
     // 卡太久：自动多给一点提示（算作需要提示）
     if ((Date.now() - ST.t0) / 1000 > 45 && ST.shown < 3 && !ST.autoUp) { ST.autoUp = true; ST.prompted = true; ST.shown++; renderPractice(true); }
+  }
+}
+// 一直在听：学生一开口就录（带 0.6 秒前置缓冲），说完自动回答；教练自己在说话时不听
+async function earLoop() {
+  const p = await pcmStart(); if (!p) return;
+  let loud = 0;
+  while (RUN) {
+    await wait(100);
+    if (REC || ST?.finishing || ST?.stop) { loud = 0; continue; }
+    const speaking = (AUD && !AUD.paused) || (window.speechSynthesis?.speaking);
+    if (speaking || Date.now() - (ST?.spokeAt || 0) < 800) { loud = 0; continue; }
+    loud = p.rms > 0.03 ? loud + 1 : 0;
+    if (loud >= 3) {
+      loud = 0; const b = $('#askBtn');
+      listen(async q => { if (q && q.split(' ').length >= 2) await answerQ(q); if (b) b.innerHTML = `${I.mic('#3F9E8F')} Ask`; },
+             st => { if (b) b.innerHTML = st === 'rec' ? '● Listening' : 'Thinking…'; });
+    }
   }
 }
 // 没有镜头或在等老师时：看老师有没有在老师端点了“这步做完了”
@@ -593,19 +808,32 @@ async function finishStep() {
   if (ST.finishing) return; ST.finishing = true;
   const result = ST.help ? 'help' : (ST.errors || ST.prompted) ? 'error' : 'clean';
   const m = $('#mark'); if (m) m.classList.add('on');
-  say(['Nice.', 'Good.', 'Got it.'][IDX % 3], 1);
+  const praise = ST.verified === 'teacher' ? S.praiseT(IDX) : (ST.praise || S.praise(IDX));
   try { await api(`/api/tasks/${T.id}/sessions/${SESS.session}/step`, { json: { step: IDX, result, secs: (Date.now() - ST.t0) / 1000, errors: ST.errors, verified: ST.verified || 'camera' } }); } catch (e) {}
   DONE.add(IDX);
-  await wait(1100);
   let nxt = availSteps();
   if (!nxt.length && DONE.size < T.steps.length) nxt = T.steps.map((_, i) => i).filter(i => !DONE.has(i));   // 依赖数据有问题时兜底
-  if (nxt.length) { FR = []; focusStep(nxt[0], true); return; }
+  if (nxt.length) {
+    // 像真人老师一样：先具体地夸一句，再自然地带到下一步（一口气说完，不被打断）
+    const k = nxt[0], lv = SESS.levels[k] ?? 3, s2 = T.steps[k];
+    const name = DONE.size % 3 === 1 && ME ? (LANG === 'zh' ? `，${nameOf(ME)}` : `, ${nameOf(ME)}`) : '';
+    const lead = S.lead(DONE.size);
+    const verb = stepText(k).replace(/[.。]$/, ''); const low = LANG === 'zh' ? verb : verb.charAt(0).toLowerCase() + verb.slice(1);
+    const next = lv >= 2 ? (LANG === 'zh' ? `${lead}${low}。` : `${lead} ${low}.`) : lv === 1 ? S.next(stepCue(k)) : (DONE.size === T.steps.length - 1 ? S.oneMore() : S.whatNext());
+    const p1 = LANG === 'zh' ? praise.replace(/[。.!！]?$/, name + '。') : praise.replace(/[.!]?$/, name + '.');
+    await wait(500);
+    FR = []; focusStep(k, false);
+    if (lv >= 2 && s2.voice && LANG === 'en') say(p1, 0, () => sayStep(T, k));
+    else say(`${p1} ${next}`);
+    ST.spokeAt = Date.now();
+    return;
+  }
   RUN = false; stopCam();
   try { await api(`/api/tasks/${T.id}/sessions/${SESS.session}/end`, { method: 'POST' }); } catch (e) {}
   show('ldone');
-  $('#ldone').innerHTML = `<div class="yay"><div class="ring">${I.check('#fff', 72)}</div><h1>You did it!</h1><p class="sub L">${esc(T.title)}</p></div>
-    <div class="dock" style="flex-direction:column"><button class="cta" onclick="location.hash='#learn';route()">Finish</button></div>`;
-  say('You did it!');
+  $('#ldone').innerHTML = `<div class="yay"><div class="ring">${I.check('#fff', 72)}</div><h1>${S.didIt()}</h1><p class="sub L">${esc(T.title)}</p></div>
+    <div class="dock" style="flex-direction:column"><button class="cta" onclick="location.hash='#learn';route()">${S.finishB()}</button></div>`;
+  say(S.finish(ST.praise, ME ? nameOf(ME) : ''));
 }
 
 /* ================= 老师端 ================= */
@@ -636,13 +864,14 @@ async function careHome() {
     ${review.length ? `<h2 style="margin:22px 4px 10px">Waiting for you</h2><div class="stack">${review.map(row).join('')}</div>` : ''}
     <h2 style="margin:22px 4px 10px">Skills</h2>
     <div class="stack">${active.length ? active.map(row).join('') : '<p class="sub" style="margin:4px">Nothing yet. Make the first skill.</p>'}</div>
-    <div class="card" style="margin-top:22px"><h2 style="font-size:16px">Voice on this device</h2>
+    <div class="card" style="margin-top:22px"><h2 style="font-size:16px">Voice</h2><p class="sub" id="ttsNote" style="font-size:13px;margin:4px 0 0"></p>
       <p class="sub" style="font-size:13px;margin:4px 0 8px">Best: record your own voice for each step (Steps tab). Otherwise pick the most natural voice here.
       On iPhone, download a better voice in Settings › Accessibility › Spoken Content › Voices › English › Ava or Zoe (Premium).</p>
       <div class="row" style="gap:8px"><select id="vsel" style="flex:1;min-height:44px;border-radius:12px;padding:0 10px;font-size:15px" onchange="try{localStorage.setItem('voice',this.value)}catch(e){};say('Put the cup on the counter.')"></select>
       <button class="tag" onclick="say('Put the cup on the counter.')">Test</button></div></div>
     <div class="dock"><button class="cta" onclick="newTask()">+ New skill</button></div>`;
   fillVoices(); liveLoop();
+  api('/api/tts/status').then(r => { const n = $('#ttsNote'); if (n) n.textContent = r.ok ? `Students hear the built-in natural voice (${r.voice}). The device voice below is only a fallback.` : 'Natural voice not installed on the server; the device voice below is used.'; }).catch(() => {});
   api('/api/requests').then(R => { const el = $('#reqs'); if (el && R.length) el.innerHTML = `<h2 style="margin:22px 4px 10px">Students asked for</h2><div class="stack">${R.map(r =>
     `<div class="card row" style="gap:12px"><div style="flex:1"><b>${esc(r.name)}</b>: “${esc(r.said)}”</div><button class="tag" onclick="fromRequest(${r.i}, ${esc(JSON.stringify(r.said))})">Make it</button><button class="tag" onclick="api('/api/requests/${r.i}/done',{method:'POST'}).then(careHome)">Dismiss</button></div>`).join('')}</div>`; }).catch(() => {});
 }
@@ -696,9 +925,27 @@ function renderNew(msg) {
     </div>
     <div class="dock"><button class="cta" id="goBtn" onclick="createTask()" ${NEW.goal.trim() ? '' : 'disabled'}>Draft the steps</button></div>`;
 }
-async function createTask() {
+// 目标太宽时先追问一个问题（"use the computer" → 发邮件 / 写文档 / 问 AI…），老师点一个再拆步骤
+async function createTask(skipClarify) {
+  if (!skipClarify) {
+    const fd0 = new FormData(); fd0.append('goal', NEW.goal.trim()); if (NEW.photo) fd0.append('photo', NEW.photo);
+    $('#cnew').innerHTML = loading('One moment…', 'Checking the goal is specific enough for a task analysis');
+    let c = { specific: true }; try { c = await api('/api/tasks/clarify', { body: fd0 }); } catch (e) {}
+    if (!c.specific) {
+      $('#cnew').innerHTML = `
+        <div class="top"><button class="icon-btn" onclick="renderNew()" aria-label="Back">${I.back}</button></div>
+        <h1 style="margin-top:8px">${esc(c.question)}</h1>
+        <p class="sub">“${esc(NEW.goal)}” is a bit broad for one lesson. Pick what they would actually do, or type your own.</p>
+        <div class="stack" style="margin-top:16px">
+          ${c.options.map(o => `<button class="taskcard slim" onclick="NEW.goal=${esc(JSON.stringify(o))};createTask(true)"><b>${esc(o)}</b></button>`).join('')}
+          <input class="field" placeholder="Something else: one specific thing to do" style="font-size:17px" onkeydown="if(event.key==='Enter'&&this.value.trim()){NEW.goal=this.value.trim();createTask(true)}">
+        </div>
+        <p class="disc"><a href="#" style="color:var(--sub)" onclick="createTask(true);return false">Draft steps for “${esc(NEW.goal)}” anyway</a></p>`;
+      return;
+    }
+  }
   const fd = new FormData(); fd.append('goal', NEW.goal.trim()); fd.append('style', NEW.style); fd.append('media', NEW.media); if (NEW.photo) fd.append('photo', NEW.photo);
-  $('#cnew').innerHTML = loading('Reading the photo and drafting steps…', 'Spark reads the controls · Wonder writes the task analysis');
+  $('#cnew').innerHTML = loading('Drafting the steps…', 'Wonder writes the task analysis with special-ed rules');
   try { const t = await api('/api/tasks', { body: fd }); location.hash = '#care/' + t.id; }
   catch (e) { renderNew('Something went wrong: ' + e.message); }
 }
@@ -773,7 +1020,8 @@ async function propAct(pid, action) { CT = await api(`/api/tasks/${CT.id}/propos
 function renderSteps() {
   const t = CT, drawing = t.steps.some(s => s.card?.state === 'drawing'), unsafe = t.steps.some(s => s.card?.state === 'unsafe'),
     missing = t.steps.filter(s => s.card?.state === 'needs_photo').length;
-  if (t.refuse) { $('#tbody').innerHTML = `<div class="card"><b>We can't make this one.</b><p class="sub">${esc(t.refuse)}</p></div>`; return; }
+  if (t.refuse) { $('#tbody').innerHTML = `<div class="card"><b>Not this one, as written.</b><p class="sub" style="margin-top:6px">${esc(t.refuse)}</p>
+    <button class="tag" style="margin-top:10px" onclick="newTask();NEW.goal=${esc(JSON.stringify(t.goal || ''))};renderNew()">Try a different wording</button></div>`; return; }
   $('#tbody').innerHTML = `
     ${t.seen?.missing ? `<div class="gentle" style="font-size:15px;text-align:left;margin-bottom:12px">Tip: ${esc(t.seen.missing)}</div>` : ''}
     <div class="card" style="margin-bottom:12px"><h2 style="font-size:16px">Assign to</h2>
@@ -805,6 +1053,7 @@ function renderSteps() {
       </div>`).join('')}
       <div style="padding:12px 0"><button class="tag" onclick="addStep()">+ Add step</button></div>
     </div>
+    ${/comput|laptop|screen|phone|tablet|ipad|email|app\b|browser|chatgpt|\bai\b/i.test(t.goal + ' ' + t.title) ? `<div class="gentle" style="font-size:14px;text-align:left;margin:0 0 12px">Screen task: the phone camera can't read the screen, so you'll confirm each step (hold on the student's phone, or tap on this page). A photo of each finished screen helps.</div>` : ''}
     <p class="disc">Task analysis rules: one action per step, 8 words max, a visible end state the camera can check. Steps with heat, electricity or blades show objects only.</p>
     <div class="dock">
       <button class="cta soft" style="flex:1" onclick="printCards()" ${drawing ? 'disabled' : ''}>Print cards</button>
@@ -899,7 +1148,7 @@ async function renderData() {
     <div class="dock"><button class="cta" onclick="CTAB='record';renderTask()">Record a lesson</button></div>`; return; }
   const md = d => new Date(d * 1000).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
   const cell = (c, i, j) => { const [bg, fg] = CODE_C[c.code] || ['#fff', '#6B7875'];
-    return `<td><button class="cell" style="background:${bg};color:${fg}" onclick="editCell(${j},${i})" aria-label="Step ${i + 1}, session ${j + 1}">${c.code || '–'}${c.edited ? '<i class="ed"></i>' : ''}${c.code && !c.edited ? `<span class="vm">${c.v === 'camera' ? '◉' : c.v === 'teacher' ? 'T' : c.v === 'self' ? '?' : ''}</span>` : ''}${(c.flags || []).length ? '<i class="fl"></i>' : ''}</button></td>`; };
+    return `<td><button class="cell" style="background:${bg};color:${fg}" onclick="editCell(${j},${i})" aria-label="Step ${i + 1}, session ${j + 1}">${c.code || '–'}${c.edited ? '<i class="ed"></i>' : ''}${c.code && !c.edited ? `<span class="vm">${c.v === 'camera' ? '◉' : c.v === 'agreed' ? '◎' : c.v === 'teacher' ? 'T' : c.v === 'self' ? '?' : ''}</span>` : ''}${(c.flags || []).length ? '<i class="fl"></i>' : ''}</button></td>`; };
   $('#tbody').innerHTML = `
     <div class="kpi"><div><b>${p.pct[0]}%</b><span>baseline independent</span></div><div><b>${p.pct.at(-1)}%</b><span>latest (${S} session${S > 1 ? 's' : ''})</span></div>
       <div><b>${p.step_mastered.filter(Boolean).length}/${n}</b><span>steps mastered (3× I)</span></div></div>
@@ -907,7 +1156,7 @@ async function renderData() {
       <thead><tr><th class="st">Step</th>${p.sessions.map(s => `<th>${md(s.date)}<span>${s.setting === 'home' ? 'home' : s.source === 'teacher' ? 'tchr' : 'app'}</span></th>`).join('')}</tr></thead>
       <tbody>${p.steps.map((txt, i) => `<tr><th class="st">${p.step_mastered[i] ? '✓ ' : ''}${i + 1}. ${esc(txt)}</th>${p.grid[i].map((c, j) => cell(c, i, j)).join('')}</tr>`).join('')}
       <tr class="pct"><th class="st">% independent</th>${p.pct.map(x => `<td>${x}%</td>`).join('')}</tr></tbody></table></div>
-      <div class="legend" style="padding-right:12px"><span><b>◉</b> camera saw it done</span><span><b>T</b> teacher confirmed</span><span><b>?</b> not confirmed</span><span><i style="background:#F0614F;border-radius:50%"></i> skip / unsafe flag</span>${Object.entries(p.code_names).map(([k, v]) => `<span><i style="background:${CODE_C[k][0]};border:1px solid #BFE3DC"></i><b>${k}</b> ${esc(v)}</span>`).join('')}</div></div>
+      <div class="legend" style="padding-right:12px"><span><b>◉</b> camera saw it done</span><span><b>◎</b> student said done, camera agreed</span><span><b>T</b> teacher confirmed</span><span><b>?</b> not confirmed</span><span><i style="background:#F0614F;border-radius:50%"></i> skip / unsafe flag</span>${Object.entries(p.code_names).map(([k, v]) => `<span><i style="background:${CODE_C[k][0]};border:1px solid #BFE3DC"></i><b>${k}</b> ${esc(v)}</span>`).join('')}</div></div>
     <div class="card" style="margin-top:12px"><h2 style="font-size:16px">IEP progress note</h2>
       <p class="sub" style="font-size:13px;margin:4px 0 8px">Calculated from the data above. Nothing is made up.</p>
       <p id="iep" style="font-size:15px;line-height:1.55;margin:0"></p>
@@ -929,7 +1178,7 @@ async function renderData() {
 function editCell(j, i) {
   EDIT = { sid: PROG.sessions[j].id, step: i };
   const c = PROG.grid[i][j];
-  const how = { camera: 'Camera saw this step done.', teacher: 'Teacher confirmed this step.', self: 'Not confirmed (student tapped done).' }[c.v] || '';
+  const how = { camera: 'Camera saw this step done.', agreed: 'Student said it was done; the camera saw nothing against it.', teacher: 'Teacher confirmed this step.', self: 'Not confirmed (student tapped done).' }[c.v] || '';
   const fl = (c.flags || []).map(f => ({ unsafe: 'Unsafe action seen', ahead: 'Tried to skip this step', wrong: 'Started the wrong way' }[f] || f)).join(' · ');
   $('#picker').innerHTML = `<div class="sheetpick"><div class="row" style="justify-content:space-between"><b>Step ${i + 1}: ${esc(PROG.steps[i])}</b><button class="tag" onclick="$('#picker').innerHTML=''">Close</button></div>
     ${how || fl ? `<p class="sub" style="font-size:14px;margin:6px 0">${esc(how)}${fl ? ` <b style="color:#B83A2A">${esc(fl)}</b>` : ''}</p>` : ''}

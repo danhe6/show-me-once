@@ -6,3 +6,5 @@ imageio-ffmpeg>=0.5
 fastapi>=0.110
 uvicorn>=0.29
 python-multipart>=0.0.9
+soundfile>=0.12
+kokoro-onnx>=0.4

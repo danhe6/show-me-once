@@ -1,0 +1,173 @@
+{
+ "id": "be99304548",
+ "goal": "Fold a T-shirt",
+ "title": "Fold a T-shirt",
+ "created": 1793636046.07491,
+ "approved": true,
+ "seen": {
+  "object": null,
+  "controls": [],
+  "parts": [],
+  "printed_instructions": null,
+  "missing": null
+ },
+ "refuse": null,
+ "problems": [],
+ "steps": [
+  {
+   "text": "Lay shirt flat, front side down.",
+   "cue": "Flat.",
+   "done_state": "the whole shirt lies flat and spread out on the table",
+   "objects": [
+    "T-shirt",
+    "table"
+   ],
+   "safety": null,
+   "chunk": 1,
+   "needs": [],
+   "hazards": [],
+   "card": {
+    "state": "none"
+   }
+  },
+  {
+   "text": "Fold left side to middle.",
+   "cue": "Left.",
+   "done_state": "left side of shirt covers middle of shirt",
+   "objects": [
+    "T-shirt"
+   ],
+   "safety": null,
+   "chunk": 1,
+   "needs": [
+    0
+   ],
+   "hazards": [],
+   "card": {
+    "state": "none"
+   }
+  },
+  {
+   "text": "Fold right side to middle.",
+   "cue": "Right.",
+   "done_state": "right side of shirt covers middle of shirt",
+   "objects": [
+    "T-shirt"
+   ],
+   "safety": null,
+   "chunk": 2,
+   "needs": [
+    0
+   ],
+   "hazards": [],
+   "card": {
+    "state": "none"
+   }
+  },
+  {
+   "text": "Fold bottom up to middle.",
+   "cue": "Bottom.",
+   "done_state": "bottom edge of shirt sits at middle of shirt",
+   "objects": [
+    "T-shirt"
+   ],
+   "safety": null,
+   "chunk": 2,
+   "needs": [
+    1,
+    2
+   ],
+   "hazards": [],
+   "card": {
+    "state": "none"
+   }
+  },
+  {
+   "text": "Fold bottom up again.",
+   "cue": "Again.",
+   "done_state": "a small folded shirt rectangle sits on the table",
+   "objects": [
+    "T-shirt",
+    "table"
+   ],
+   "safety": null,
+   "chunk": 2,
+   "needs": [
+    3
+   ],
+   "hazards": [],
+   "card": {
+    "state": "none"
+   }
+  },
+  {
+   "text": "Turn folded shirt over.",
+   "cue": "Turn.",
+   "done_state": "smooth side of folded shirt faces up on table",
+   "objects": [
+    "folded shirt",
+    "table"
+   ],
+   "safety": null,
+   "chunk": 3,
+   "needs": [
+    4
+   ],
+   "hazards": [],
+   "card": {
+    "state": "none"
+   }
+  },
+  {
+   "text": "Slide folded shirt to side.",
+   "cue": "Side.",
+   "done_state": "folded shirt sits at side of table",
+   "objects": [
+    "folded shirt",
+    "table"
+   ],
+   "safety": null,
+   "chunk": 3,
+   "needs": [
+    5
+   ],
+   "hazards": [],
+   "card": {
+    "state": "none"
+   }
+  }
+ ],
+ "levels": [
+  3,
+  3,
+  3,
+  3,
+  3,
+  3,
+  3,
+  3
+ ],
+ "history": [
+  [],
+  [],
+  [],
+  [],
+  [],
+  [],
+  [],
+  []
+ ],
+ "sessions": [],
+ "has_photo": false,
+ "assigned": [
+  "672fd5",
+  "00e3fa",
+  "988b54"
+ ],
+ "learners": {},
+ "style": "illustration",
+ "media": "live",
+ "order": "flex",
+ "agent_log": [],
+ "proposals": []
+}
