@@ -5,7 +5,7 @@
 > Built for the Meta Global AI Developer Hackathon (Oct 26 – Nov 4, 2026) · Indie track · Solo entry
 > Everything in this repo was written during the event. The full build log is in [`docs/DEVLOG.md`](docs/DEVLOG.md).
 >
-> **Demo video:** see the submission page (2:39). It is a developer demo: the interface is real; practice segments replay model outputs from test runs with test images as the camera, and data-sheet/agent screens use labelled sample data.
+> **Demo video (2:39):** [demo/show_me_once_demo.mp4](demo/show_me_once_demo.mp4). It is a developer demo: the interface is real; practice segments replay model outputs from test runs with test images as the camera, and data-sheet/agent screens use labelled sample data.
 
 ---
 
